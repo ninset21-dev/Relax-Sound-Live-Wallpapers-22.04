@@ -24,11 +24,7 @@
     "status": "completed"
   },
   {
-    "content": "Проверить остальные файлы (music.tsx, effects.tsx, videos.tsx) на совместимость",
-    "status": "in_progress"
-  },
-  {
     "content": "Пуш в GitHub",
-    "status": "pending"
+    "status": "completed"
   }
 ]
