@@ -1,26 +1,34 @@
 [
   {
-    "content": "Клонировать и изучить репозиторий с GitHub",
+    "content": "Переименование: app.json, eas.json, translations, splash, settings",
     "status": "completed"
   },
   {
-    "content": "Проанализировать структуру проекта и найти проблемы",
+    "content": "Исправить AppContext (радио, AppState, язык, isWidgetCollapsed)",
     "status": "completed"
   },
   {
-    "content": "Задать пользователю уточняющие вопросы",
+    "content": "Исправить radioStations.ts (уникальные 10 станций)",
+    "status": "completed"
+  },
+  {
+    "content": "Исправить VolumeWidget + добавить в layout",
+    "status": "completed"
+  },
+  {
+    "content": "Исправить withLiveWallpaper.js (пакет, частицы 2x, жесты)",
+    "status": "completed"
+  },
+  {
+    "content": "Исправить withAppWidget.js (пакет, виджет play/pause/next/prev)",
+    "status": "completed"
+  },
+  {
+    "content": "Проверить остальные файлы (music.tsx, effects.tsx, videos.tsx) на совместимость",
     "status": "in_progress"
   },
   {
-    "content": "Составить план исправлений и улучшений",
-    "status": "pending"
-  },
-  {
-    "content": "Исправить критические ошибки и добавить функции",
-    "status": "pending"
-  },
-  {
-    "content": "Подготовить сборку APK через EAS",
+    "content": "Пуш в GitHub",
     "status": "pending"
   }
 ]
