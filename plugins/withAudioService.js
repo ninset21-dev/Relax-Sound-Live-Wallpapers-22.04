@@ -224,21 +224,21 @@ class RelaxAudioService : Service() {
     }
 
     private fun pauseInternal(userInitiated: Boolean = false) {
-        // Smooth volume fade-out then actually pause. Matches the fade-in ramp
-        // so auto-pause on SCREEN_OFF / other-app / focus-loss feels gentle
-        // instead of abruptly cutting audio. releaseFocus() + broadcastState()
-        // are deferred to the fade completion callback — otherwise we would
-        // report isPlaying=false to widgets while the player is still audibly
-        // playing at full volume, and release audio focus mid-fade (which lets
-        // other apps start their audio and causes overlap).
+        // Persist the "do not auto-resume" flag SYNCHRONOUSLY when the user
+        // deliberately paused — the subsequent fade-out is async (~1.25s) and
+        // can be cancelled by a re-entrant fadeOutAndPause from SCREEN_OFF /
+        // focus-loss broadcasts, losing the deferred flag and causing unwanted
+        // auto-resume on screen unlock.
+        if (userInitiated) {
+            getSharedPreferences("relax_audio", MODE_PRIVATE)
+                .edit().putBoolean("was_playing", false).apply()
+        }
+        // Smooth volume fade-out then actually pause. releaseFocus() +
+        // broadcastState() stay in the completion callback so we don't release
+        // focus mid-fade (which would let other apps overlap audio) and don't
+        // broadcast isPlaying=false while the player is still audibly playing.
         fadeOutAndPause {
             releaseFocus()
-            if (userInitiated) {
-                // Clear the resume flag so SCREEN_ON / visibility broadcasts
-                // don't auto-restart playback the user deliberately stopped.
-                getSharedPreferences("relax_audio", MODE_PRIVATE)
-                    .edit().putBoolean("was_playing", false).apply()
-            }
             broadcastState()
         }
     }
