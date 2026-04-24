@@ -45,7 +45,10 @@ const withLiveWallpaperFiles = (config) =>
       const root = config.modRequest.projectRoot;
       writeResource(root, "xml/relax_wallpaper.xml", RELAX_WALLPAPER_XML);
       writeNativeSource(root, "wallpaper/RelaxWallpaperService.kt", liveWallpaperServiceKt(PKG));
-      writeNativeSource(root, "wallpaper/RelaxWallpaperEngine.kt", wallpaperEngineKt(PKG));
+      const engineSrc = wallpaperEngineKt(PKG);
+      if (engineSrc) {
+        writeNativeSource(root, "wallpaper/RelaxWallpaperEngine.kt", engineSrc);
+      }
       writeNativeSource(root, "wallpaper/EffectRenderer.kt", effectRendererKt(PKG));
       return config;
     }
