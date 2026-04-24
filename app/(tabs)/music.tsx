@@ -29,10 +29,10 @@ export default function MusicScreen() {
     }
   }, [app]);
 
-  const loadGenre = useCallback(async (g: string) => {
+  const loadGenre = useCallback(async (g: string, q?: typeof app.quality) => {
     setLoading(true); setGenre(g);
     try {
-      const s = await popularByGenre(g, app.quality);
+      const s = await popularByGenre(g, q ?? app.quality);
       setStations(s);
     } finally { setLoading(false); }
   }, [app.quality]);
@@ -84,7 +84,7 @@ export default function MusicScreen() {
           <Text style={[styles.label, { marginTop: 12 }]}>{t("music.quality")}</Text>
           <View style={[styles.row, { flexWrap: "wrap" }]}>
             {(["auto", "low", "med", "high"] as const).map((q) => (
-              <Pressable key={q} onPress={() => { app.setQuality(q); loadGenre(genre); }} style={[styles.chip, app.quality === q && styles.chipActive]}>
+              <Pressable key={q} onPress={() => { app.setQuality(q); loadGenre(genre, q); }} style={[styles.chip, app.quality === q && styles.chipActive]}>
                 <Text style={[styles.chipText, app.quality === q && styles.chipTextActive]}>
                   {q === "auto" ? t("music.qualityAuto") : q === "low" ? t("music.qualityLow") : q === "med" ? t("music.qualityMed") : t("music.qualityHigh")}
                 </Text>

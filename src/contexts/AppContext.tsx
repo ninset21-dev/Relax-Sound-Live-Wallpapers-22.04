@@ -142,7 +142,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       },
       setFadeMs: (ms) => { persist({ fadeMs: ms }); Audio.setFadeMs(ms).catch(() => {}); },
       setPerfMode: (m) => {
-        persist({ perfMode: m, fps: m === "eco" ? 15 : m === "high" ? 60 : 30, intensity: m === "eco" ? 0.3 : state.intensity });
+        const newFps = m === "eco" ? 15 : m === "high" ? 60 : 30;
+        const newIntensity = m === "eco" ? 0.3 : state.intensity;
+        persist({ perfMode: m, fps: newFps, intensity: newIntensity });
+        Wallpaper.updateWallpaperParams({ fps: newFps, intensity: newIntensity, speed: state.speed, effect: state.effect }).catch(() => {});
       },
       setStartup: (s) => persist({ startup: s }),
       setQuality: (q) => persist({ quality: q }),

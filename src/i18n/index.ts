@@ -87,11 +87,89 @@ const ru = {
   }
 };
 
-const en = { translation: JSON.parse(JSON.stringify(ru.translation).replace(/"([^"]+)"/g, (m, t) => m)) };
-// English copy mirrors keys but keeps same strings for safety — user requested system-language default which in RU stays RU.
-en.translation.tabs = { home: "Home", music: "Music", effects: "Effects", settings: "Settings" };
-en.translation.common = { save: "Save", cancel: "Cancel", yes: "Yes", no: "No",
-  chooseAll: "Pick multiple files", on: "On", off: "Off", seconds: "sec" };
+const en = {
+  translation: {
+    tabs: { home: "Home", music: "Music", effects: "Effects", settings: "Settings" },
+    home: {
+      title: "Home",
+      intro: "Pick photos or videos to use as live wallpapers on your home and lock screens.",
+      addPhotos: "Add photos / videos",
+      addPhotosHint: "Opens the system picker — select multiple at once.",
+      pickFolder: "Pick a whole folder",
+      googlePhotos: "Google Photos album",
+      googlePhotosHint: "Taken from your shared link. Tap to collapse / expand.",
+      collapse: "Collapse", expand: "Expand",
+      autoChange: "Auto-change on a timer",
+      autoChangeHint: "Cycles through wallpapers from the selected set.",
+      interval: "Interval",
+      setWallpaper: "Apply wallpaper",
+      setHome: "Home screen",
+      setLock: "Lock screen",
+      setBoth: "Both screens",
+      previewDisabled: "Effect preview disabled as requested.",
+      fromUrl: "Add from a URL",
+      empty: "Nothing added yet — tap \"Add all\"."
+    },
+    music: {
+      title: "Music",
+      local: "My music (from phone)",
+      pick: "Pick tracks (multi-select)",
+      pickHint: "Select several files in the system picker.",
+      radio: "Online radio",
+      radioHint: "Hundreds of stations. Pick a genre.",
+      genre: "Genre",
+      quality: "Stream quality",
+      qualityAuto: "Auto", qualityLow: "Low", qualityMed: "Medium", qualityHigh: "High",
+      startupSource: "Source on startup",
+      startupRadio: "Radio", startupLocal: "My music",
+      nowPlaying: "Now playing",
+      noTrack: "No track",
+      play: "Play", pause: "Pause", next: "Next", prev: "Previous",
+      volume: "App volume", fadeIn: "Volume fade-in"
+    },
+    effects: {
+      title: "Effects",
+      intro: "Effects are applied to the live wallpaper and synchronised with the app.",
+      none: "No effect",
+      snow: "Snow", rain: "Rain", bubbles: "Bubbles", leaves: "Leaves",
+      flowers: "Flowers", particles: "Particles", fireflies: "Fireflies",
+      intensity: "Intensity", speed: "Speed", fps: "Frame rate",
+      apply: "Apply to live wallpaper"
+    },
+    settings: {
+      title: "Settings",
+      language: "Language",
+      systemLanguage: "Follow Android system",
+      doubleTapLock: "Double-tap to lock screen",
+      doubleTapHint: "Requires Accessibility permission. Tap \"Open settings\".",
+      openA11y: "Open Accessibility settings",
+      overlay: "Floating widget over all apps",
+      overlayRequest: "Grant overlay permission",
+      overlayShow: "Show floating widget",
+      overlayHide: "Hide floating widget",
+      perfMode: "App mode",
+      perfHigh: "Performance",
+      perfEco: "Power saver",
+      perfBalanced: "Balanced",
+      instructions: "Instructions",
+      howWidgets: "How to add widgets to the home screen",
+      howWidgetsBody: "1) Long-press an empty area of the home screen. 2) Choose \"Widgets\". 3) Find \"Relax Sound\" and drag the size you want.",
+      howMusic: "How to add your music / radio as the background",
+      howMusicBody: "In the Music tab, choose \"My music\" and pick files through the system picker. For radio, pick a genre and tap a station.",
+      howAutoChange: "How to set up wallpaper auto-change",
+      howAutoChangeBody: "On the Home tab tap \"Add photos/videos\", select several files, then enable \"Auto-change on a timer\" and set the interval.",
+      links: "Contact the author",
+      instagram: "Follow for inspiration (Instagram)",
+      email: "Feedback",
+      website: "Portfolio website"
+    },
+    common: {
+      save: "Save", cancel: "Cancel", yes: "Yes", no: "No",
+      chooseAll: "Add all (multi-select files)",
+      on: "On", off: "Off", seconds: "sec"
+    }
+  }
+};
 
 const locale = Localization.getLocales()[0]?.languageCode ?? "en";
 const lng = locale.startsWith("ru") ? "ru" : "en";
