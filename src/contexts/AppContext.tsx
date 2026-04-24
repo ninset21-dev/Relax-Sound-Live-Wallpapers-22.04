@@ -182,7 +182,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (state.tracks.length === 0) return;
         const idx = state.currentTrack
           ? state.tracks.findIndex((t) => t.uri === state.currentTrack!.uri)
-          : 0;
+          : -1;
         const prev = state.tracks[(idx - 1 + state.tracks.length) % state.tracks.length];
         persist({ currentTrack: prev });
         try { await Audio.play(prev.uri, prev.title); } catch {}

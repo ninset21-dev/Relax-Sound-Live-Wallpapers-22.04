@@ -188,6 +188,11 @@ class RelaxAudioService : Service() {
     }
 
     private fun fadeInAndResume() {
+        // pauseInternal() releases audio focus, so we must re-acquire it here
+        // before resuming. Otherwise we'd play without holding focus — other
+        // apps' audio wouldn't be ducked and no focus-change callbacks would
+        // fire, leaving the service in an inconsistent state.
+        if (!requestFocus()) return
         ensurePlayer()
         val p = player ?: return
         if (!p.isPlaying) { p.volume = 0f; p.play() }
