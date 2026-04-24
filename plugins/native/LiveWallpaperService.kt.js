@@ -88,6 +88,14 @@ class RelaxWallpaperService : WallpaperService() {
                 // nulling cache.
                 if (type == "video" && mediaPlayer == null) {
                     setupMedia(surfaceHolder)
+                } else if (type == "video" && mediaPlayer != null) {
+                    // video -> video: release the old player so setupMedia
+                    // re-binds the surface to the new URI. Without this the
+                    // previous clip keeps playing even though prefs point to
+                    // the new one.
+                    try { mediaPlayer?.stop(); mediaPlayer?.release() } catch (_: Throwable) {}
+                    mediaPlayer = null
+                    setupMedia(surfaceHolder)
                 } else if (type == "image" && mediaPlayer != null) {
                     try { mediaPlayer?.stop(); mediaPlayer?.release() } catch (_: Throwable) {}
                     mediaPlayer = null
