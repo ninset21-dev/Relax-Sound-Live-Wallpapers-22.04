@@ -43,6 +43,12 @@ class RelaxWallpaperService : WallpaperService() {
     inner class RelaxEngine : Engine() {
 
         private val handler = Handler(Looper.getMainLooper())
+        // Dedicated background thread for bitmap decoding. BitmapFactory on
+        // 4K wallpaper images can take 100-500ms which would freeze frameTick
+        // and trigger ANRs if done on the main handler.
+        private val decodeThread = android.os.HandlerThread("relax-wp-decode").apply { start() }
+        private val decodeHandler = Handler(decodeThread.looper)
+        @Volatile private var decodingUri: String? = null
         private val prefs: SharedPreferences =
             getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -94,18 +100,41 @@ class RelaxWallpaperService : WallpaperService() {
                 if (!visible) return
                 maybeAutoSwap()
                 // React to wallpaper swap (auto-change / widget shuffle): if the
-                // stored imageUri changed, decode the new bitmap before drawing.
+                // stored imageUri changed, decode the new bitmap OFF the frame
+                // thread. We keep drawing the old cachedBg while the new one
+                // is being decoded so frames never stall.
                 val newUri = prefs.getString("wallpaper_image_uri", null)
-                if (newUri != cachedBgUri) {
-                    try { cachedBg?.recycle() } catch (_: Throwable) {}
-                    cachedBg = null
+                if (newUri != cachedBgUri && newUri != decodingUri) {
                     cachedBgUri = newUri
-                    if (!newUri.isNullOrBlank()) {
-                        try {
-                            contentResolver.openInputStream(Uri.parse(newUri))?.use { input ->
-                                cachedBg = BitmapFactory.decodeStream(input)
+                    decodingUri = newUri
+                    if (newUri.isNullOrBlank()) {
+                        val old = cachedBg
+                        cachedBg = null
+                        try { old?.recycle() } catch (_: Throwable) {}
+                    } else {
+                        decodeHandler.post {
+                            var bm: android.graphics.Bitmap? = null
+                            try {
+                                contentResolver.openInputStream(Uri.parse(newUri))?.use { input ->
+                                    bm = BitmapFactory.decodeStream(input)
+                                }
+                            } catch (t: Throwable) { Log.e(TAG, "swap decode", t) }
+                            // Publish the result back on the main handler so
+                            // cachedBg reads/writes stay single-threaded with
+                            // the draw loop.
+                            handler.post {
+                                // If another swap happened while we were
+                                // decoding, drop this stale bitmap.
+                                if (cachedBgUri == newUri) {
+                                    val old = cachedBg
+                                    cachedBg = bm
+                                    try { old?.recycle() } catch (_: Throwable) {}
+                                } else {
+                                    try { bm?.recycle() } catch (_: Throwable) {}
+                                }
+                                if (decodingUri == newUri) decodingUri = null
                             }
-                        } catch (t: Throwable) { Log.e(TAG, "swap decode", t) }
+                        }
                     }
                 }
                 // Skip Canvas-based overlay while MediaPlayer owns the surface
@@ -170,6 +199,11 @@ class RelaxWallpaperService : WallpaperService() {
             try { cachedBg?.recycle() } catch (_: Throwable) {}
             cachedBg = null
             super.onSurfaceDestroyed(holder)
+        }
+
+        override fun onDestroy() {
+            try { decodeThread.quitSafely() } catch (_: Throwable) {}
+            super.onDestroy()
         }
 
         override fun onTouchEvent(event: MotionEvent) {
