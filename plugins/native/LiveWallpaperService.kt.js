@@ -49,11 +49,15 @@ class RelaxWallpaperService : WallpaperService() {
         private var mediaPlayer: MediaPlayer? = null
         private var effectRenderer: EffectRenderer? = null
         private var visible = false
+        private var cachedBg: android.graphics.Bitmap? = null
 
         private val frameTick = object : Runnable {
             override fun run() {
                 if (!visible) return
-                drawFrame()
+                // Skip Canvas-based overlay while MediaPlayer owns the surface
+                // (locking the canvas on a surface attached to MediaPlayer would
+                // throw IllegalStateException / clobber video frames).
+                if (mediaPlayer == null) drawFrame()
                 val fps = prefs.getInt("effect_fps", 30).coerceIn(10, 60)
                 handler.postDelayed(this, 1000L / fps)
             }
@@ -97,6 +101,8 @@ class RelaxWallpaperService : WallpaperService() {
             handler.removeCallbacks(frameTick)
             try { mediaPlayer?.release() } catch (_: Throwable) {}
             mediaPlayer = null
+            try { cachedBg?.recycle() } catch (_: Throwable) {}
+            cachedBg = null
             super.onSurfaceDestroyed(holder)
         }
 
@@ -127,21 +133,20 @@ class RelaxWallpaperService : WallpaperService() {
         }
 
         private fun drawImage(holder: SurfaceHolder, uri: String?) {
+            if (uri != null) {
+                try {
+                    contentResolver.openInputStream(Uri.parse(uri))?.use { input ->
+                        cachedBg = BitmapFactory.decodeStream(input)
+                    }
+                } catch (t: Throwable) {
+                    Log.e(TAG, "decode image failed", t)
+                }
+            }
             val canvas = try { holder.lockCanvas() } catch (_: Throwable) { null } ?: return
             try {
                 canvas.drawColor(Color.parseColor("#0b1f14"))
-                if (uri != null) {
-                    try {
-                        val input = contentResolver.openInputStream(Uri.parse(uri))
-                        val bmp = BitmapFactory.decodeStream(input)
-                        input?.close()
-                        if (bmp != null) {
-                            val rect = Rect(0, 0, canvas.width, canvas.height)
-                            canvas.drawBitmap(bmp, null, rect, null)
-                        }
-                    } catch (t: Throwable) {
-                        Log.e(TAG, "decode image failed", t)
-                    }
+                cachedBg?.let { bmp ->
+                    canvas.drawBitmap(bmp, null, Rect(0, 0, canvas.width, canvas.height), null)
                 }
             } finally {
                 try { holder.unlockCanvasAndPost(canvas) } catch (_: Throwable) {}
@@ -150,16 +155,23 @@ class RelaxWallpaperService : WallpaperService() {
 
         private fun drawFrame() {
             val effect = prefs.getString("effect_type", "none") ?: "none"
-            if (effect == "none") return
             val holder = surfaceHolder
             val canvas = try { holder.lockCanvas() } catch (_: Throwable) { null } ?: return
             try {
-                effectRenderer?.drawOverlay(
-                    canvas,
-                    effect,
-                    intensity = prefs.getFloat("effect_intensity", 0.5f),
-                    speed = prefs.getFloat("effect_speed", 1.0f)
-                )
+                // Always repaint the backdrop first — lockCanvas returns a fresh buffer
+                // so without this the screen would flash black between effect frames.
+                canvas.drawColor(Color.parseColor("#0b1f14"))
+                cachedBg?.let { bmp ->
+                    canvas.drawBitmap(bmp, null, Rect(0, 0, canvas.width, canvas.height), null)
+                }
+                if (effect != "none") {
+                    effectRenderer?.drawOverlay(
+                        canvas,
+                        effect,
+                        intensity = prefs.getFloat("effect_intensity", 0.5f),
+                        speed = prefs.getFloat("effect_speed", 1.0f)
+                    )
+                }
             } finally {
                 try { holder.unlockCanvasAndPost(canvas) } catch (_: Throwable) {}
             }

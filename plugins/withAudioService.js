@@ -74,19 +74,23 @@ class RelaxAudioService : Service() {
     override fun onCreate() {
         super.onCreate()
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        targetVolume = getSharedPreferences("relax_audio", MODE_PRIVATE).getFloat("vol", 0.7f)
         createChannel()
         registerReceiver(screenReceiver, IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_OFF)
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_USER_PRESENT)
         })
-        registerReceiver(
-            visibilityReceiver, IntentFilter("${PKG}.WALLPAPER_VISIBILITY"),
-            if (Build.VERSION.SDK_INT >= 33) Context.RECEIVER_NOT_EXPORTED else 0
-        )
+        if (Build.VERSION.SDK_INT >= 33)
+            registerReceiver(visibilityReceiver, IntentFilter("${PKG}.WALLPAPER_VISIBILITY"), Context.RECEIVER_NOT_EXPORTED)
+        else
+            registerReceiver(visibilityReceiver, IntentFilter("${PKG}.WALLPAPER_VISIBILITY"))
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // If started via startForegroundService (API 26+), we MUST call startForeground
+        // within 5s — even for actions that don't start playback.
+        try { startForeground(NOTIF_ID, buildNotification()) } catch (_: Throwable) {}
         when (intent?.action) {
             ACTION_PLAY -> {
                 val url = intent.getStringExtra(EXTRA_URL) ?: return START_NOT_STICKY
@@ -95,9 +99,12 @@ class RelaxAudioService : Service() {
             }
             ACTION_PAUSE -> pauseInternal()
             ACTION_TOGGLE -> togglePlayPause()
+            ACTION_NEXT -> sendBroadcast(Intent("${PKG}.audio.REQUEST_NEXT").setPackage(packageName))
+            ACTION_PREV -> sendBroadcast(Intent("${PKG}.audio.REQUEST_PREV").setPackage(packageName))
             ACTION_VOLUME -> {
                 targetVolume = intent.getFloatExtra(EXTRA_VOLUME, 0.7f).coerceIn(0f, 1f)
                 player?.volume = targetVolume
+                persistPrefs()
                 broadcastState()
             }
         }
@@ -181,20 +188,23 @@ class RelaxAudioService : Service() {
         fadeInVolume()
     }
 
+    private var fadeRunner: Runnable? = null
+
     private fun fadeInVolume() {
         val steps = 20
         val durationMs = getSharedPreferences("relax_audio", MODE_PRIVATE).getInt("fade_ms", 2500)
         val stepDelay = (durationMs / steps).toLong().coerceAtLeast(20L)
-        handler.removeCallbacksAndMessages("fade")
+        fadeRunner?.let { handler.removeCallbacks(it) }
         var i = 0
         val runner = object : Runnable {
             override fun run() {
                 val p = player ?: return
                 i++
                 p.volume = (targetVolume * (i.toFloat() / steps)).coerceIn(0f, 1f)
-                if (i < steps) handler.postDelayed(this, stepDelay)
+                if (i < steps) handler.postDelayed(this, stepDelay) else fadeRunner = null
             }
         }
+        fadeRunner = runner
         handler.post(runner)
     }
 
@@ -224,7 +234,15 @@ class RelaxAudioService : Service() {
         return b.build()
     }
 
+    private fun persistPrefs() {
+        getSharedPreferences("relax_audio", MODE_PRIVATE).edit()
+            .putString("title", currentTitle)
+            .putFloat("vol", targetVolume)
+            .apply()
+    }
+
     private fun broadcastState() {
+        persistPrefs()
         val intent = Intent(ACTION_STATE).apply {
             setPackage(packageName)
             putExtra("title", currentTitle)
@@ -246,14 +264,65 @@ class RelaxAudioService : Service() {
 
 const MODULE_KT = `package ${PKG}.native
 
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
 import com.facebook.react.bridge.*
+import com.facebook.react.modules.core.DeviceEventManagerModule
 import ${PKG}.audio.RelaxAudioService
 
 class RelaxAudioModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
     override fun getName() = "RelaxAudioModule"
+
+    private val stateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(ctx: Context, intent: Intent) {
+            try {
+                when (intent.action) {
+                    RelaxAudioService.ACTION_STATE -> {
+                        val params = Arguments.createMap().apply {
+                            putString("title", intent.getStringExtra("title") ?: "")
+                            putBoolean("isPlaying", intent.getBooleanExtra("isPlaying", false))
+                            putDouble("volume", intent.getFloatExtra("volume", 0.7f).toDouble())
+                        }
+                        reactApplicationContext
+                            .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                            .emit("RelaxAudioState", params)
+                    }
+                    "${PKG}.audio.REQUEST_NEXT",
+                    "${PKG}.audio.REQUEST_PREV" -> {
+                        val dir = if (intent.action?.endsWith("NEXT") == true) "next" else "prev"
+                        val params = Arguments.createMap().apply { putString("direction", dir) }
+                        reactApplicationContext
+                            .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                            .emit("RelaxAudioRequest", params)
+                    }
+                }
+            } catch (_: Throwable) {}
+        }
+    }
+
+    override fun initialize() {
+        super.initialize()
+        val filter = IntentFilter().apply {
+            addAction(RelaxAudioService.ACTION_STATE)
+            addAction("${PKG}.audio.REQUEST_NEXT")
+            addAction("${PKG}.audio.REQUEST_PREV")
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= 33)
+                reactApplicationContext.registerReceiver(stateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            else
+                reactApplicationContext.registerReceiver(stateReceiver, filter)
+        } catch (_: Throwable) {}
+    }
+
+    override fun invalidate() {
+        try { reactApplicationContext.unregisterReceiver(stateReceiver) } catch (_: Throwable) {}
+        super.invalidate()
+    }
 
     @ReactMethod
     fun play(url: String, title: String, promise: Promise) {
@@ -275,11 +344,16 @@ class RelaxAudioModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun setVolume(vol: Double, promise: Promise) {
         try {
-            val i = Intent(reactApplicationContext, RelaxAudioService::class.java).apply {
+            val ctx = reactApplicationContext
+            val i = Intent(ctx, RelaxAudioService::class.java).apply {
                 action = RelaxAudioService.ACTION_VOLUME
                 putExtra(RelaxAudioService.EXTRA_VOLUME, vol.toFloat())
             }
-            reactApplicationContext.startService(i)
+            // Persist immediately so the widget/UI stay in sync even if the service
+            // isn't running yet (API 31+ disallows plain startService from background).
+            ctx.getSharedPreferences("relax_audio", Context.MODE_PRIVATE)
+                .edit().putFloat("vol", vol.toFloat()).apply()
+            if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i) else ctx.startService(i)
             promise.resolve(true)
         } catch (t: Throwable) { promise.reject("VOLUME_FAIL", t) }
     }
@@ -293,8 +367,10 @@ class RelaxAudioModule(reactContext: ReactApplicationContext) :
 
     private fun action(a: String, promise: Promise) {
         try {
-            val i = Intent(reactApplicationContext, RelaxAudioService::class.java).apply { action = a }
-            reactApplicationContext.startService(i); promise.resolve(true)
+            val ctx = reactApplicationContext
+            val i = Intent(ctx, RelaxAudioService::class.java).apply { action = a }
+            if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i) else ctx.startService(i)
+            promise.resolve(true)
         } catch (t: Throwable) { promise.reject("ACTION_FAIL", t) }
     }
 

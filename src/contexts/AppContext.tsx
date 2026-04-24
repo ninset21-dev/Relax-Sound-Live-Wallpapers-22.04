@@ -1,11 +1,6 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import NetInfo from "@react-native-community/netinfo";
-import * as DocumentPicker from "expo-document-picker";
-import * as ImagePicker from "expo-image-picker";
-import * as MediaLibrary from "expo-media-library";
-import { AppState } from "react-native";
-import { Audio, Wallpaper, Widget, Floating, Accessibility, onAudioState } from "@/native";
+import { Audio, Wallpaper, Widget, Accessibility, onAudioState, onAudioRequest } from "@/native";
 
 export type MediaItem = { uri: string; type: "image" | "video"; name?: string };
 export type Track = { uri: string; title: string };
@@ -52,6 +47,8 @@ type Ctx = AppState_ & {
   setAutoChangeSec(n: number): void;
   play(t: Track): Promise<void>;
   togglePlay(): Promise<void>;
+  nextTrack(): Promise<void>;
+  prevTrack(): Promise<void>;
   applyLiveWallpaper(mode: "home" | "lock" | "both"): Promise<void>;
   refreshA11y(): Promise<void>;
 };
@@ -107,14 +104,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => sub.remove();
   }, []);
 
+  // Keep the latest state in a ref so native broadcast listeners always see it.
+  const stateRef = useRef(state);
+  useEffect(() => { stateRef.current = state; }, [state]);
+
   useEffect(() => {
-    const sub = AppState.addEventListener("change", (st) => {
-      if (st !== "active") {
-        Audio.pause().catch(() => {});
-      }
-    });
+    const step = (dir: "next" | "prev") => {
+      const s = stateRef.current;
+      if (s.tracks.length === 0) return;
+      const i = s.currentTrack ? s.tracks.findIndex((t) => t.uri === s.currentTrack!.uri) : -1;
+      const target = dir === "next"
+        ? s.tracks[(i + 1) % s.tracks.length]
+        : s.tracks[(i - 1 + s.tracks.length) % s.tracks.length];
+      persist({ currentTrack: target });
+      Audio.play(target.uri, target.title).catch(() => {});
+    };
+    const sub = onAudioRequest((r) => step(r.direction));
     return () => sub.remove();
-  }, []);
+  }, [persist]);
+
+  // Intentionally do NOT auto-pause on AppState change: when the user is on
+  // their Home screen the app is inactive but the wallpaper engine is visible
+  // and music should keep playing. The native RelaxAudioService reacts to
+  // SCREEN_OFF and the wallpaper engine's WALLPAPER_VISIBILITY broadcasts,
+  // which is the correct source of truth for "is the user actually away".
 
   const api: Ctx = useMemo(
     () => ({
@@ -153,6 +166,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } catch (e) { console.warn("play fail", e); }
       },
       togglePlay: async () => { try { await Audio.toggle(); } catch {} },
+      nextTrack: async () => {
+        if (state.tracks.length === 0) return;
+        const idx = state.currentTrack
+          ? state.tracks.findIndex((t) => t.uri === state.currentTrack!.uri)
+          : -1;
+        const next = state.tracks[(idx + 1) % state.tracks.length];
+        persist({ currentTrack: next });
+        try { await Audio.play(next.uri, next.title); } catch {}
+      },
+      prevTrack: async () => {
+        if (state.tracks.length === 0) return;
+        const idx = state.currentTrack
+          ? state.tracks.findIndex((t) => t.uri === state.currentTrack!.uri)
+          : 0;
+        const prev = state.tracks[(idx - 1 + state.tracks.length) % state.tracks.length];
+        persist({ currentTrack: prev });
+        try { await Audio.play(prev.uri, prev.title); } catch {}
+      },
       applyLiveWallpaper: async (mode) => {
         try {
           const video = state.mediaLibrary.find((m) => m.type === "video");
@@ -166,8 +197,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             fps: state.fps
           });
           if (mode !== "both" && image) {
-            // fall back to static for the other surface to honor separate home/lock
-            await Wallpaper.setStaticWallpaper(image.uri, mode);
+            // fall back to static for the *other* surface so live/static are split
+            const other: "home" | "lock" = mode === "home" ? "lock" : "home";
+            await Wallpaper.setStaticWallpaper(image.uri, other);
           }
           persist({ liveWallpaperActive: true });
         } catch (e) { console.warn("apply wallpaper fail", e); }

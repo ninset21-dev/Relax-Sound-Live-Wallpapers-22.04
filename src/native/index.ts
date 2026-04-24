@@ -1,4 +1,4 @@
-import { NativeModules, NativeEventEmitter, DeviceEventEmitter, Platform } from "react-native";
+import { NativeModules, DeviceEventEmitter, Platform } from "react-native";
 
 type Promiselike<T> = Promise<T>;
 
@@ -64,3 +64,6 @@ export const Accessibility: AccessibilityModuleI = isAndroid
 
 export const onAudioState = (cb: (s: { title: string; isPlaying: boolean; volume: number }) => void) =>
   DeviceEventEmitter.addListener("RelaxAudioState", cb);
+
+export const onAudioRequest = (cb: (r: { direction: "next" | "prev" }) => void) =>
+  DeviceEventEmitter.addListener("RelaxAudioRequest", cb);
