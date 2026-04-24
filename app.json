@@ -2,6 +2,7 @@
   "expo": {
     "name": "Relax Sound Live Wallpapers",
     "slug": "relax-sound-live-wallpapers",
+    "owner": "alexander30",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -13,7 +14,9 @@
       "resizeMode": "cover",
       "backgroundColor": "#0b1f14"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "android": {
       "package": "com.relaxsound.livewallpapers",
       "versionCode": 1,
@@ -70,7 +73,10 @@
     },
     "extra": {
       "eas": {
-        "projectId": "TO_BE_FILLED"
+        "projectId": "873c3fa6-7b45-42a5-a0ab-8287b0e6afd7"
+      },
+      "router": {
+        "origin": false
       }
     }
   }
