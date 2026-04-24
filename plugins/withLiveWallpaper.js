@@ -17,8 +17,7 @@ const withLiveWallpaperManifest = (config) =>
           "android:name": ".wallpaper.RelaxWallpaperService",
           "android:exported": "true",
           "android:label": "Relax Sound Live Wallpapers",
-          "android:permission": "android.permission.BIND_WALLPAPER",
-          "android:foregroundServiceType": "mediaPlayback"
+          "android:permission": "android.permission.BIND_WALLPAPER"
         },
         "intent-filter": [
           {
