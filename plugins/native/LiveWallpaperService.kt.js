@@ -51,7 +51,10 @@ class RelaxWallpaperService : WallpaperService() {
         private var visible = false
         private var cachedBg: android.graphics.Bitmap? = null
         private var cachedBgUri: String? = null
-        private var lastAutoSwapMs: Long = 0L
+        // Start the auto-swap "clock" from engine creation so the first swap
+        // fires after the user's configured interval instead of immediately
+        // on device boot / wallpaper reload.
+        private var lastAutoSwapMs: Long = System.currentTimeMillis()
         private var autoSwapIndex: Int = 0
 
         private fun maybeAutoSwap() {

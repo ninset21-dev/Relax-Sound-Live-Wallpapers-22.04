@@ -47,7 +47,7 @@ export default function EffectsScreen() {
 
         <GlassCard padding={0}>
           <View style={{ height: 220 }}>
-            <EffectPreview effect={app.effect} intensity={app.intensity} speed={app.speed} />
+            <EffectPreview effect={app.effect} intensity={app.intensity} speed={app.speed} height={220} />
             <View style={styles.previewTag}>
               <Ionicons name="eye-outline" size={14} color={theme.colors.textPrimary} />
               <Text style={styles.previewTagText}>Live Preview</Text>
