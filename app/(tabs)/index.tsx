@@ -26,6 +26,8 @@ export default function HomeScreen() {
   const [gpSelected, setGpSelected] = useState<Set<string>>(new Set());
   const [libSelected, setLibSelected] = useState<Set<string>>(new Set());
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [albumList, setAlbumList] = useState<MediaLibrary.Album[] | null>(null);
+  const [albumLoading, setAlbumLoading] = useState(false);
 
   const loadGP = useCallback(async () => {
     setGpLoading(true);
@@ -76,33 +78,35 @@ export default function HomeScreen() {
       Alert.alert("Нужен доступ", "Разрешите приложению доступ к медиа-библиотеке.");
       return;
     }
-    const albums = await MediaLibrary.getAlbumsAsync({ includeSmartAlbums: true });
-    if (!albums.length) {
-      Alert.alert("Папки не найдены", "Нет доступных альбомов в медиа-библиотеке.");
-      return;
+    setAlbumLoading(true);
+    try {
+      const albums = await MediaLibrary.getAlbumsAsync({ includeSmartAlbums: true });
+      if (!albums.length) {
+        Alert.alert("Папки не найдены", "Нет доступных альбомов в медиа-библиотеке.");
+        return;
+      }
+      // Open a modal with the full list — Alert.alert on Android only shows
+      // 3 buttons, so we can't use it for a potentially long album list.
+      setAlbumList(albums);
+    } finally {
+      setAlbumLoading(false);
     }
-    // Simple alert-based picker: show album names, user taps one.
-    Alert.alert(
-      "Выберите альбом",
-      `Найдено альбомов: ${albums.length}. В следующем диалоге появятся ${Math.min(albums.length, 8)} первых.`,
-      albums.slice(0, 8).map((a) => ({
-        text: `${a.title} (${a.assetCount})`,
-        onPress: async () => {
-          const r = await MediaLibrary.getAssetsAsync({
-            album: a.id,
-            mediaType: ["photo", "video"],
-            first: 500,
-          });
-          const items: MediaItem[] = r.assets.map((x) => ({
-            uri: x.uri,
-            type: x.mediaType === "video" ? "video" : "image",
-            name: x.filename,
-          }));
-          app.addMedia(items);
-          Alert.alert("Добавлено", `${items.length} файлов из «${a.title}» добавлены в библиотеку.`);
-        },
-      }))
-    );
+  }, []);
+
+  const importAlbum = useCallback(async (album: MediaLibrary.Album) => {
+    setAlbumList(null);
+    const r = await MediaLibrary.getAssetsAsync({
+      album: album.id,
+      mediaType: ["photo", "video"],
+      first: 500,
+    });
+    const items: MediaItem[] = r.assets.map((x) => ({
+      uri: x.uri,
+      type: x.mediaType === "video" ? "video" : "image",
+      name: x.filename,
+    }));
+    app.addMedia(items);
+    Alert.alert("Добавлено", `${items.length} файлов из «${album.title}» добавлены в библиотеку.`);
   }, [app]);
 
   /**
@@ -408,6 +412,40 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Album picker modal — replaces the old Alert.alert with 3-button cap */}
+      <Modal
+        visible={albumList !== null}
+        animationType="slide"
+        onRequestClose={() => setAlbumList(null)}
+        transparent
+      >
+        <View style={styles.modalBg}>
+          <View style={{ flex: 1, paddingTop: insets.top + 20, paddingHorizontal: 16, paddingBottom: 20 }}>
+            <View style={styles.rowBetween}>
+              <Text style={styles.h2}>Выберите альбом</Text>
+              <Pressable onPress={() => setAlbumList(null)} hitSlop={12}>
+                <Ionicons name="close" size={26} color={theme.colors.textPrimary} />
+              </Pressable>
+            </View>
+            <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 4, marginBottom: 12 }}>
+              Все фото и видео из выбранного альбома будут добавлены в библиотеку.
+            </Text>
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20 }}>
+              {(albumList ?? []).map((a) => (
+                <Pressable key={a.id} onPress={() => importAlbum(a)} style={styles.albumRow}>
+                  <Ionicons name="folder-outline" size={20} color={theme.colors.accent} />
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={styles.albumTitle}>{a.title}</Text>
+                    <Text style={styles.albumCount}>{a.assetCount} файлов</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </BackgroundGradient>
   );
 }
@@ -470,4 +508,17 @@ const styles = StyleSheet.create({
   smallDangerText: { color: "#fff", fontSize: 12, fontWeight: "600" },
   modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.9)" },
   h2: { color: theme.colors.textPrimary, fontSize: 20, fontWeight: "700", textTransform: "capitalize" },
+  albumRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    marginBottom: 8,
+  },
+  albumTitle: { color: theme.colors.textPrimary, fontSize: 15, fontWeight: "600" },
+  albumCount: { color: theme.colors.textSecondary, fontSize: 12, marginTop: 2 },
 });
