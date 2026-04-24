@@ -59,7 +59,17 @@ class RelaxAudioService : Service() {
                 Intent.ACTION_USER_PRESENT, Intent.ACTION_SCREEN_ON -> {
                     val wasPlaying = getSharedPreferences("relax_audio", MODE_PRIVATE)
                         .getBoolean("was_playing", false)
-                    if (wasPlaying && appVisible) fadeInAndResume()
+                    // On unlock we resume unconditionally if the user hadn't
+                    // deliberately paused — we can't rely on appVisible here
+                    // because the wallpaper engine's onVisibilityChanged(true)
+                    // broadcast races with USER_PRESENT (and may never fire
+                    // at all if the user hasn't installed the live wallpaper).
+                    // If the user actually opens another app afterwards, the
+                    // wallpaper visibility broadcast will pause us again.
+                    if (wasPlaying) {
+                        appVisible = true
+                        fadeInAndResume()
+                    }
                 }
             }
         }
@@ -214,7 +224,13 @@ class RelaxAudioService : Service() {
             playWhenReady = true
         }
         fadeInVolume()
-        getSharedPreferences("relax_audio", MODE_PRIVATE).edit().putBoolean("was_playing", true).apply()
+        // Persist the last URL so fadeInAndResume() can restore playback even
+        // after the service was killed and the player lost its media item.
+        getSharedPreferences("relax_audio", MODE_PRIVATE).edit()
+            .putBoolean("was_playing", true)
+            .putString("last_url", url)
+            .putString("last_title", currentTitle)
+            .apply()
         startForeground(NOTIF_ID, buildNotification())
     }
 
@@ -280,8 +296,26 @@ class RelaxAudioService : Service() {
         if (!requestFocus()) return
         ensurePlayer()
         val p = player ?: return
+        // If the service was killed (LMK/Doze) while the phone was locked, the
+        // newly-built player has no media item. Re-hydrate from prefs so unlock
+        // actually resumes playback instead of silently doing nothing.
+        if (p.mediaItemCount == 0) {
+            val prefs = getSharedPreferences("relax_audio", MODE_PRIVATE)
+            val url = prefs.getString("last_url", null)
+            val title = prefs.getString("last_title", "Relax") ?: "Relax"
+            if (!url.isNullOrBlank()) {
+                currentTitle = title
+                p.setMediaItem(MediaItem.fromUri(Uri.parse(url)))
+                p.prepare()
+            } else {
+                return
+            }
+        }
         if (!p.isPlaying) { p.volume = 0f; p.play() }
         fadeInVolume()
+        // Make sure we're in the foreground so the system doesn't kill us
+        // mid-resume (the first pauseInternal + fade can demote priority).
+        try { startForeground(NOTIF_ID, buildNotification()) } catch (_: Throwable) {}
     }
 
     private var fadeRunner: Runnable? = null
