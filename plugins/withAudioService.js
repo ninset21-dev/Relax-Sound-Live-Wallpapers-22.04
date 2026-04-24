@@ -97,7 +97,7 @@ class RelaxAudioService : Service() {
                 currentTitle = intent.getStringExtra(EXTRA_TITLE) ?: "Relax"
                 play(url)
             }
-            ACTION_PAUSE -> pauseInternal()
+            ACTION_PAUSE -> pauseInternal(userInitiated = true)
             ACTION_TOGGLE -> togglePlayPause()
             ACTION_NEXT -> sendBroadcast(Intent("${PKG}.audio.REQUEST_NEXT").setPackage(packageName))
             ACTION_PREV -> sendBroadcast(Intent("${PKG}.audio.REQUEST_PREV").setPackage(packageName))
@@ -172,12 +172,18 @@ class RelaxAudioService : Service() {
 
     private fun togglePlayPause() {
         val p = player ?: return
-        if (p.isPlaying) pauseInternal() else fadeInAndResume()
+        if (p.isPlaying) pauseInternal(userInitiated = true) else fadeInAndResume()
     }
 
-    private fun pauseInternal() {
+    private fun pauseInternal(userInitiated: Boolean = false) {
         player?.pause()
         releaseFocus()
+        if (userInitiated) {
+            // Clear the resume flag so SCREEN_ON / visibility broadcasts don't
+            // auto-restart playback that the user deliberately stopped.
+            getSharedPreferences("relax_audio", MODE_PRIVATE)
+                .edit().putBoolean("was_playing", false).apply()
+        }
         broadcastState()
     }
 
