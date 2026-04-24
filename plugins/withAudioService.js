@@ -226,20 +226,25 @@ class RelaxAudioService : Service() {
     private fun pauseInternal(userInitiated: Boolean = false) {
         // Smooth volume fade-out then actually pause. Matches the fade-in ramp
         // so auto-pause on SCREEN_OFF / other-app / focus-loss feels gentle
-        // instead of abruptly cutting audio.
-        fadeOutAndPause()
-        releaseFocus()
-        if (userInitiated) {
-            // Clear the resume flag so SCREEN_ON / visibility broadcasts don't
-            // auto-restart playback that the user deliberately stopped.
-            getSharedPreferences("relax_audio", MODE_PRIVATE)
-                .edit().putBoolean("was_playing", false).apply()
+        // instead of abruptly cutting audio. releaseFocus() + broadcastState()
+        // are deferred to the fade completion callback — otherwise we would
+        // report isPlaying=false to widgets while the player is still audibly
+        // playing at full volume, and release audio focus mid-fade (which lets
+        // other apps start their audio and causes overlap).
+        fadeOutAndPause {
+            releaseFocus()
+            if (userInitiated) {
+                // Clear the resume flag so SCREEN_ON / visibility broadcasts
+                // don't auto-restart playback the user deliberately stopped.
+                getSharedPreferences("relax_audio", MODE_PRIVATE)
+                    .edit().putBoolean("was_playing", false).apply()
+            }
+            broadcastState()
         }
-        broadcastState()
     }
 
-    private fun fadeOutAndPause() {
-        val p = player ?: return
+    private fun fadeOutAndPause(onComplete: (() -> Unit)? = null) {
+        val p = player ?: run { onComplete?.invoke(); return }
         val steps = 16
         val durationMs = (getSharedPreferences("relax_audio", MODE_PRIVATE)
             .getInt("fade_ms", 2500) / 2).coerceAtLeast(300)
@@ -249,7 +254,7 @@ class RelaxAudioService : Service() {
         var i = 0
         val runner = object : Runnable {
             override fun run() {
-                val pp = player ?: return
+                val pp = player ?: run { onComplete?.invoke(); return }
                 i++
                 val k = 1f - (i.toFloat() / steps)
                 pp.volume = (startVol * k).coerceIn(0f, 1f)
@@ -259,6 +264,7 @@ class RelaxAudioService : Service() {
                     pp.pause()
                     pp.volume = startVol // restore for next play
                     fadeRunner = null
+                    onComplete?.invoke()
                 }
             }
         }

@@ -173,8 +173,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const id = setInterval(() => {
       i = (i + 1) % items.length;
       const pick = items[i];
+      // Clear the opposite media key so native setupMedia() picks the right
+      // source (video takes priority over image).
       Wallpaper.updateWallpaperParams(
-        pick.type === "video" ? { videoUri: pick.uri } : { imageUri: pick.uri }
+        pick.type === "video"
+          ? { videoUri: pick.uri, imageUri: null }
+          : { imageUri: pick.uri, videoUri: null }
       ).catch(() => {});
     }, Math.max(10, state.autoChangeSec) * 1000);
     return () => clearInterval(id);

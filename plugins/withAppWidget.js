@@ -42,7 +42,7 @@ open class RelaxWidgetBase(private val size: String) : AppWidgetProvider() {
      */
     private fun cycleEffect(ctx: Context) {
         val wp = ctx.getSharedPreferences("relax_wallpaper_prefs", Context.MODE_PRIVATE)
-        val order = listOf("none", "snow", "rain", "bubbles", "leaves", "flowers", "particles", "fireflies", "fog", "frost")
+        val order = listOf("none", "snow", "rain", "bubbles", "leaves", "flowers", "particles", "fireflies", "fog", "frost", "stars", "aurora")
         val cur = wp.getString("effect_type", "none") ?: "none"
         val next = order[(order.indexOf(cur).coerceAtLeast(0) + 1) % order.size]
         wp.edit().putString("effect_type", next).apply()

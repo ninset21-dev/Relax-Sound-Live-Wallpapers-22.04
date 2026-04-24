@@ -96,6 +96,9 @@ export async function probeStations(stations: Station[], timeoutMs = 2000): Prom
     } catch {
       return false;
     } finally {
+      // Always abort — otherwise a successful probe leaves a never-ending
+      // audio stream open, leaking connections and battery across many probes.
+      ctrl.abort();
       clearTimeout(timer);
     }
   };
