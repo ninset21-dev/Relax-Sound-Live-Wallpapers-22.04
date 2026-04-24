@@ -52,7 +52,7 @@ open class RelaxWidgetBase(private val size: String) : AppWidgetProvider() {
             action = RelaxAudioService.ACTION_VOLUME
             putExtra(RelaxAudioService.EXTRA_VOLUME, v)
         }
-        ctx.startService(i)
+        if (android.os.Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i) else ctx.startService(i)
         refreshAll(ctx)
     }
 
@@ -97,11 +97,11 @@ open class RelaxWidgetBase(private val size: String) : AppWidgetProvider() {
             try { views.setTextViewText(R.id::class.java.getField("mode_label").getInt(null), mode.uppercase()) } catch (_: Throwable) {}
             try { views.setProgressBar(R.id::class.java.getField("vol_bar").getInt(null), 100, (vol * 100).toInt(), false) } catch (_: Throwable) {}
 
+            // Always target ONE concrete receiver (Small) so the action is
+            // delivered exactly once — otherwise all 3 widget receivers would
+            // handle it (volume 3×delta, cycle 3 positions, etc).
             val pi = { action: String ->
-                val i = Intent(ctx, RelaxWidgetBase::class.java).apply {
-                    this.action = action; component = null
-                    setPackage(ctx.packageName)
-                }
+                val i = Intent(ctx, RelaxWidgetSmall::class.java).apply { this.action = action }
                 PendingIntent.getBroadcast(ctx, action.hashCode(), i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             }
 
