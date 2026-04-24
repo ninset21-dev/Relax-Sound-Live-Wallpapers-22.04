@@ -330,7 +330,11 @@ class RelaxAudioService : Service() {
             override fun run() {
                 val p = player ?: return
                 i++
-                p.volume = (targetVolume * (i.toFloat() / steps)).coerceIn(0f, 1f)
+                // Respect the duck flag so the wallpaper video's audio isn't
+                // overridden when the wallpaper comes back into view and both
+                // a DUCK intent + a visibility broadcast land in parallel.
+                val cap = if (ducked) targetVolume * 0.2f else targetVolume
+                p.volume = (cap * (i.toFloat() / steps)).coerceIn(0f, 1f)
                 if (i < steps) handler.postDelayed(this, stepDelay) else fadeRunner = null
             }
         }
