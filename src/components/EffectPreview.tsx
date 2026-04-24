@@ -27,7 +27,10 @@ export const EffectPreview: React.FC<{
   const [tick, setTick] = useState(0);
   const particlesRef = useRef<Particle[]>([]);
 
-  const targetCount = Math.max(10, Math.min(80, Math.round(intensity * 80)));
+  // When effect is "none", the native wallpaper engine skips overlay draw
+  // entirely — mirror that behavior here so preview and real output match.
+  const targetCount =
+    effect === "none" ? 0 : Math.max(10, Math.min(80, Math.round(intensity * 80)));
 
   useEffect(() => {
     // Reset particles whenever the effect changes so old particles don't
