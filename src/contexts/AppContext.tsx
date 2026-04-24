@@ -7,7 +7,19 @@ export type Track = { uri: string; title: string };
 export type PerfMode = "balanced" | "high" | "eco";
 export type StartupSource = "radio" | "local";
 export type Quality = "auto" | "low" | "med" | "high";
-export type EffectKind = "none" | "snow" | "rain" | "bubbles" | "leaves" | "flowers" | "particles" | "fireflies";
+export type EffectKind =
+  | "none"
+  | "snow"
+  | "rain"
+  | "bubbles"
+  | "leaves"
+  | "flowers"
+  | "particles"
+  | "fireflies"
+  | "fog"
+  | "frost"
+  | "stars"
+  | "aurora";
 
 interface AppState_ {
   mediaLibrary: MediaItem[];
@@ -25,6 +37,7 @@ interface AppState_ {
   fps: number;
   autoChangeEnabled: boolean;
   autoChangeSec: number;
+  videoAudio: boolean;
   language: "system" | "ru" | "en";
   overlayEnabled: boolean;
   a11yEnabled: boolean;
@@ -32,8 +45,11 @@ interface AppState_ {
 }
 type Ctx = AppState_ & {
   addMedia(items: MediaItem[]): void;
+  removeMedia(uri: string): void;
+  removeMediaMany(uris: string[]): void;
   clearMedia(): void;
   setTracks(t: Track[]): void;
+  removeTrack(uri: string): void;
   setVolume(v: number): void;
   setFadeMs(ms: number): void;
   setPerfMode(m: PerfMode): void;
@@ -45,6 +61,7 @@ type Ctx = AppState_ & {
   setFps(f: number): void;
   setAutoChangeEnabled(b: boolean): void;
   setAutoChangeSec(n: number): void;
+  setVideoAudio(on: boolean): void;
   play(t: Track): Promise<void>;
   togglePlay(): Promise<void>;
   nextTrack(): Promise<void>;
@@ -68,6 +85,7 @@ const Default: AppState_ = {
   fps: 30,
   autoChangeEnabled: false,
   autoChangeSec: 60,
+  videoAudio: false,
   language: "system",
   overlayEnabled: false,
   a11yEnabled: false,
@@ -129,12 +147,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // SCREEN_OFF and the wallpaper engine's WALLPAPER_VISIBILITY broadcasts,
   // which is the correct source of truth for "is the user actually away".
 
+  // Push audio playlist + image library to native so native-only widget/
+  // floating controls can walk tracks and shuffle wallpapers without the
+  // JS runtime.
+  useEffect(() => {
+    const idx = state.currentTrack
+      ? Math.max(0, state.tracks.findIndex((t) => t.uri === state.currentTrack!.uri))
+      : 0;
+    Audio.setPlaylist(state.tracks.map((t) => ({ uri: t.uri, title: t.title })), idx).catch(() => {});
+  }, [state.tracks, state.currentTrack]);
+
+  useEffect(() => {
+    Widget.setMediaLibrary(state.mediaLibrary.map((m) => ({ uri: m.uri, type: m.type }))).catch(() => {});
+  }, [state.mediaLibrary]);
+
+  // Auto-change timer: every N seconds, pick the next image in the library
+  // and push it to the native wallpaper engine. The engine re-reads prefs on
+  // each frame tick so the swap is seamless.
+  useEffect(() => {
+    if (!state.autoChangeEnabled || state.mediaLibrary.length < 2) return;
+    const images = state.mediaLibrary.filter((m) => m.type === "image");
+    if (images.length < 2) return;
+    let i = 0;
+    const id = setInterval(() => {
+      i = (i + 1) % images.length;
+      const pick = images[i];
+      Wallpaper.updateWallpaperParams({ imageUri: pick.uri }).catch(() => {});
+    }, Math.max(10, state.autoChangeSec) * 1000);
+    return () => clearInterval(id);
+  }, [state.autoChangeEnabled, state.autoChangeSec, state.mediaLibrary]);
+
   const api: Ctx = useMemo(
     () => ({
       ...state,
       addMedia: (items) => persist({ mediaLibrary: [...state.mediaLibrary, ...items] }),
+      removeMedia: (uri) =>
+        persist({ mediaLibrary: state.mediaLibrary.filter((m) => m.uri !== uri) }),
+      removeMediaMany: (uris) => {
+        const set = new Set(uris);
+        persist({ mediaLibrary: state.mediaLibrary.filter((m) => !set.has(m.uri)) });
+      },
       clearMedia: () => persist({ mediaLibrary: [] }),
       setTracks: (t) => persist({ tracks: t }),
+      removeTrack: (uri) => persist({ tracks: state.tracks.filter((t) => t.uri !== uri) }),
       setVolume: (v) => {
         persist({ volume: v });
         Audio.setVolume(v).catch(() => {});
@@ -161,6 +216,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setFps: (f) => { persist({ fps: f }); Wallpaper.updateWallpaperParams({ fps: f }).catch(() => {}); },
       setAutoChangeEnabled: (b) => persist({ autoChangeEnabled: b }),
       setAutoChangeSec: (n) => persist({ autoChangeSec: Math.max(10, n) }),
+      setVideoAudio: (on) => {
+        persist({ videoAudio: on });
+        Wallpaper.updateWallpaperParams({ videoAudio: on }).catch(() => {});
+      },
       play: async (t) => {
         persist({ currentTrack: t });
         try {
@@ -194,13 +253,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           await Wallpaper.setLiveWallpaper({
             videoUri: video?.uri ?? null,
             imageUri: image?.uri ?? null,
+            videoAudio: state.videoAudio,
             effect: state.effect,
             intensity: state.intensity,
             speed: state.speed,
             fps: state.fps
           });
+          // Android's ACTION_CHANGE_LIVE_WALLPAPER installs on SYSTEM by
+          // default; to install only on lock we still use that intent (the
+          // live wallpaper goes on both) but also set a static image on the
+          // other surface. For HOME-only we apply a static to LOCK; for
+          // LOCK-only we apply a static to HOME.
           if (mode !== "both" && image) {
-            // fall back to static for the *other* surface so live/static are split
             const other: "home" | "lock" = mode === "home" ? "lock" : "home";
             await Wallpaper.setStaticWallpaper(image.uri, other);
           }

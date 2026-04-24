@@ -34,6 +34,8 @@ class RelaxAudioService : Service() {
         const val ACTION_PREV = "${PKG}.audio.PREV"
         const val ACTION_VOLUME = "${PKG}.audio.VOLUME"
         const val ACTION_STATE = "${PKG}.audio.STATE"
+        const val ACTION_DUCK = "${PKG}.audio.DUCK"
+        const val ACTION_UNDUCK = "${PKG}.audio.UNDUCK"
         const val EXTRA_URL = "url"
         const val EXTRA_TITLE = "title"
         const val EXTRA_VOLUME = "volume"
@@ -99,16 +101,62 @@ class RelaxAudioService : Service() {
             }
             ACTION_PAUSE -> pauseInternal(userInitiated = true)
             ACTION_TOGGLE -> togglePlayPause()
-            ACTION_NEXT -> sendBroadcast(Intent("${PKG}.audio.REQUEST_NEXT").setPackage(packageName))
-            ACTION_PREV -> sendBroadcast(Intent("${PKG}.audio.REQUEST_PREV").setPackage(packageName))
+            ACTION_NEXT -> stepPlaylist(+1)
+            ACTION_PREV -> stepPlaylist(-1)
+            ACTION_DUCK -> duck()
+            ACTION_UNDUCK -> unduck()
             ACTION_VOLUME -> {
                 targetVolume = intent.getFloatExtra(EXTRA_VOLUME, 0.7f).coerceIn(0f, 1f)
-                player?.volume = targetVolume
+                if (!ducked) player?.volume = targetVolume
                 persistPrefs()
                 broadcastState()
             }
         }
         return START_STICKY
+    }
+
+    /**
+     * Walk the persisted playlist (written by JS via RelaxAudioModule.setPlaylist)
+     * directly in native code so the widget/floating controls work even while
+     * the RN layer is not running. Falls back to the legacy REQUEST broadcast if
+     * we have no playlist yet, giving JS a chance to pick something.
+     */
+    private fun stepPlaylist(dir: Int) {
+        val prefs = getSharedPreferences("relax_audio", MODE_PRIVATE)
+        val raw = prefs.getString("playlist_json", null)
+        if (raw.isNullOrBlank()) {
+            val dirStr = if (dir > 0) "REQUEST_NEXT" else "REQUEST_PREV"
+            sendBroadcast(Intent("${PKG}.audio.$dirStr").setPackage(packageName))
+            return
+        }
+        try {
+            val arr = org.json.JSONArray(raw)
+            if (arr.length() == 0) return
+            var idx = prefs.getInt("playlist_index", 0)
+            idx = ((idx + dir) % arr.length() + arr.length()) % arr.length()
+            val obj = arr.getJSONObject(idx)
+            val url = obj.optString("uri", "")
+            val title = obj.optString("title", "Relax")
+            if (url.isBlank()) return
+            prefs.edit().putInt("playlist_index", idx).apply()
+            currentTitle = title
+            play(url)
+            sendBroadcast(
+                Intent("${PKG}.audio.TRACK_CHANGED").setPackage(packageName)
+                    .putExtra("uri", url).putExtra("title", title).putExtra("index", idx)
+            )
+        } catch (t: Throwable) { Log.e(TAG, "stepPlaylist", t) }
+    }
+
+    /** Reduce volume to 20% of target (no focus release) for external video etc. */
+    private var ducked: Boolean = false
+    private fun duck() {
+        ducked = true
+        player?.volume = (targetVolume * 0.2f).coerceIn(0f, 1f)
+    }
+    private fun unduck() {
+        ducked = false
+        player?.volume = targetVolume
     }
 
     private fun requestFocus(): Boolean {
@@ -176,7 +224,10 @@ class RelaxAudioService : Service() {
     }
 
     private fun pauseInternal(userInitiated: Boolean = false) {
-        player?.pause()
+        // Smooth volume fade-out then actually pause. Matches the fade-in ramp
+        // so auto-pause on SCREEN_OFF / other-app / focus-loss feels gentle
+        // instead of abruptly cutting audio.
+        fadeOutAndPause()
         releaseFocus()
         if (userInitiated) {
             // Clear the resume flag so SCREEN_ON / visibility broadcasts don't
@@ -185,6 +236,34 @@ class RelaxAudioService : Service() {
                 .edit().putBoolean("was_playing", false).apply()
         }
         broadcastState()
+    }
+
+    private fun fadeOutAndPause() {
+        val p = player ?: return
+        val steps = 16
+        val durationMs = (getSharedPreferences("relax_audio", MODE_PRIVATE)
+            .getInt("fade_ms", 2500) / 2).coerceAtLeast(300)
+        val stepDelay = (durationMs / steps).toLong().coerceAtLeast(15L)
+        fadeRunner?.let { handler.removeCallbacks(it) }
+        val startVol = p.volume
+        var i = 0
+        val runner = object : Runnable {
+            override fun run() {
+                val pp = player ?: return
+                i++
+                val k = 1f - (i.toFloat() / steps)
+                pp.volume = (startVol * k).coerceIn(0f, 1f)
+                if (i < steps) {
+                    handler.postDelayed(this, stepDelay)
+                } else {
+                    pp.pause()
+                    pp.volume = startVol // restore for next play
+                    fadeRunner = null
+                }
+            }
+        }
+        fadeRunner = runner
+        handler.post(runner)
     }
 
     private fun fadeInAndResume() {
@@ -375,6 +454,34 @@ class RelaxAudioModule(reactContext: ReactApplicationContext) :
             .edit().putInt("fade_ms", ms.coerceIn(200, 15000)).apply()
         promise.resolve(true)
     }
+
+    /**
+     * Persist the playlist so the native service can step NEXT/PREV without
+     * depending on the RN runtime being alive. JS passes an array of
+     * { uri, title } objects and the current index.
+     */
+    @ReactMethod
+    fun setPlaylist(items: ReadableArray, currentIndex: Int, promise: Promise) {
+        try {
+            val arr = org.json.JSONArray()
+            for (i in 0 until items.size()) {
+                val m = items.getMap(i) ?: continue
+                arr.put(org.json.JSONObject().apply {
+                    put("uri", m.getString("uri") ?: "")
+                    put("title", m.getString("title") ?: "Relax")
+                })
+            }
+            reactApplicationContext.getSharedPreferences("relax_audio", Context.MODE_PRIVATE)
+                .edit()
+                .putString("playlist_json", arr.toString())
+                .putInt("playlist_index", currentIndex.coerceIn(0, (arr.length() - 1).coerceAtLeast(0)))
+                .apply()
+            promise.resolve(true)
+        } catch (t: Throwable) { promise.reject("PLAYLIST_FAIL", t) }
+    }
+
+    @ReactMethod fun duck(promise: Promise) { action(RelaxAudioService.ACTION_DUCK, promise) }
+    @ReactMethod fun unduck(promise: Promise) { action(RelaxAudioService.ACTION_UNDUCK, promise) }
 
     private fun action(a: String, promise: Promise) {
         try {

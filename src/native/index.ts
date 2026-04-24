@@ -5,7 +5,20 @@ type Promiselike<T> = Promise<T>;
 export interface WallpaperParams {
   videoUri?: string | null;
   imageUri?: string | null;
-  effect?: "none" | "snow" | "rain" | "bubbles" | "leaves" | "flowers" | "particles" | "fireflies";
+  videoAudio?: boolean;
+  effect?:
+    | "none"
+    | "snow"
+    | "rain"
+    | "bubbles"
+    | "leaves"
+    | "flowers"
+    | "particles"
+    | "fireflies"
+    | "fog"
+    | "frost"
+    | "stars"
+    | "aurora";
   intensity?: number; // 0..1
   speed?: number; // 0.2..3
   fps?: number; // 10..60
@@ -23,9 +36,13 @@ interface AudioModuleI {
   toggle(): Promiselike<boolean>;
   setVolume(v: number): Promiselike<boolean>;
   setFadeMs(ms: number): Promiselike<boolean>;
+  setPlaylist(items: { uri: string; title: string }[], index: number): Promiselike<boolean>;
+  duck(): Promiselike<boolean>;
+  unduck(): Promiselike<boolean>;
 }
 interface WidgetModuleI {
   updateWidgetState(title: string, volume: number, mode: string): Promiselike<boolean>;
+  setMediaLibrary(items: { uri: string; type: string }[]): Promiselike<boolean>;
 }
 interface FloatingModuleI {
   hasOverlayPermission(): Promiselike<boolean>;

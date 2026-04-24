@@ -54,6 +54,11 @@ class EffectRenderer(private val context: Context, private val prefs: SharedPref
             "leaves" -> Particle(rnd.nextFloat() * w, -20f, (rnd.nextFloat()-0.5f)*2.5f, 1.5f+rnd.nextFloat()*1.5f, 12f+rnd.nextFloat()*8f, 12f, 12f, rnd.nextFloat()*6f)
             "flowers" -> Particle(rnd.nextFloat() * w, -20f, (rnd.nextFloat()-0.5f)*1.8f, 1.2f+rnd.nextFloat()*1.2f, 14f+rnd.nextFloat()*10f, 14f, 14f, rnd.nextFloat()*6f)
             "fireflies" -> Particle(rnd.nextFloat() * w, rnd.nextFloat() * h, (rnd.nextFloat()-0.5f)*0.8f, (rnd.nextFloat()-0.5f)*0.8f, 4f+rnd.nextFloat()*4f, 6f, 6f, rnd.nextFloat()*6f)
+            // New effects
+            "fog" -> Particle(rnd.nextFloat() * w, rnd.nextFloat() * h, (rnd.nextFloat()-0.4f)*0.7f, (rnd.nextFloat()-0.5f)*0.15f, 80f+rnd.nextFloat()*100f, 14f, 14f, rnd.nextFloat()*6f)
+            "frost" -> Particle(rnd.nextFloat() * w, rnd.nextFloat() * h, 0f, 0f, 8f+rnd.nextFloat()*14f, 18f, 18f, rnd.nextFloat()*6f)
+            "stars" -> Particle(rnd.nextFloat() * w, rnd.nextFloat() * h, 0f, 0f, 1.5f+rnd.nextFloat()*3f, 20f, 20f, rnd.nextFloat()*6f)
+            "aurora" -> Particle(rnd.nextFloat() * w, rnd.nextFloat() * h * 0.6f, (rnd.nextFloat()-0.5f)*0.4f, 0f, 60f+rnd.nextFloat()*120f, 16f, 16f, rnd.nextFloat()*6f)
             else -> Particle(rnd.nextFloat() * w, -10f, (rnd.nextFloat()-0.5f)*2f, 2f+rnd.nextFloat()*3f, 3f+rnd.nextFloat()*5f, 6f, 6f, rnd.nextFloat()*6f)
         }
     }
@@ -103,6 +108,43 @@ class EffectRenderer(private val context: Context, private val prefs: SharedPref
                 canvas.drawCircle(p.x, p.y, p.size * 1.6f, paint)
                 paint.color = Color.argb(alpha, 255, 255, 180)
                 canvas.drawCircle(p.x, p.y, p.size * 0.6f, paint)
+            }
+            "fog" -> {
+                // Soft animated fog bands using radial gradient via nested alphas
+                val a = (40f + sin(p.phase) * 20f).toInt().coerceIn(20, 80)
+                paint.color = Color.argb(a, 200, 230, 210)
+                canvas.drawCircle(p.x, p.y, p.size, paint)
+            }
+            "frost" -> {
+                // Crystalline 6-arm snowflake pattern
+                paint.color = Color.argb(alpha, 200, 240, 255)
+                paint.strokeWidth = 1.8f
+                paint.style = Paint.Style.STROKE
+                for (i in 0 until 6) {
+                    val a = i * (Math.PI / 3).toFloat() + p.phase * 0.2f
+                    val dx = cos(a) * p.size
+                    val dy = sin(a) * p.size
+                    canvas.drawLine(p.x, p.y, p.x + dx, p.y + dy, paint)
+                }
+                paint.style = Paint.Style.FILL
+            }
+            "stars" -> {
+                // Twinkling stars with pulsing glow
+                val pulse = (sin(p.phase * 2f) * 0.5f + 0.5f)
+                paint.color = Color.argb((alpha * pulse).toInt().coerceIn(30, 255), 255, 240, 200)
+                canvas.drawCircle(p.x, p.y, p.size + pulse * 1.8f, paint)
+                paint.color = Color.argb(80, 255, 220, 180)
+                canvas.drawCircle(p.x, p.y, p.size * 3f, paint)
+            }
+            "aurora" -> {
+                // Wide gradient ribbons weaving in the upper half
+                val hueR = (140 + sin(p.phase) * 60).toInt().coerceIn(60, 220)
+                val hueG = (200 + cos(p.phase * 0.7f) * 50).toInt().coerceIn(120, 255)
+                val hueB = (180 + sin(p.phase * 1.3f) * 60).toInt().coerceIn(100, 255)
+                paint.color = Color.argb(48, hueR, hueG, hueB)
+                canvas.drawOval(
+                    RectF(p.x - p.size, p.y - p.size * 0.25f,
+                          p.x + p.size, p.y + p.size * 0.25f), paint)
             }
             else -> {
                 paint.color = Color.argb(alpha, 160, 240, 200)

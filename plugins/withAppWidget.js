@@ -26,22 +26,49 @@ open class RelaxWidgetBase(private val size: String) : AppWidgetProvider() {
             ACTION_TOGGLE -> startAudio(ctx, RelaxAudioService.ACTION_TOGGLE)
             ACTION_NEXT -> startAudio(ctx, RelaxAudioService.ACTION_NEXT)
             ACTION_PREV -> startAudio(ctx, RelaxAudioService.ACTION_PREV)
-            ACTION_CYCLE_MODE -> {
-                val prefs = ctx.getSharedPreferences("relax_widget", Context.MODE_PRIVATE)
-                val order = listOf("video", "audio", "photo", "effects")
-                val cur = prefs.getString("mode", "video") ?: "video"
-                val next = order[(order.indexOf(cur) + 1) % order.size]
-                prefs.edit().putString("mode", next).apply()
-                refreshAll(ctx)
-            }
-            ACTION_CHANGE_WALLPAPER -> {
-                val i = Intent("${PKG}.SHUFFLE_WALLPAPER").setPackage(ctx.packageName)
-                ctx.sendBroadcast(i)
-            }
+            ACTION_CYCLE_MODE -> cycleEffect(ctx)
+            ACTION_CHANGE_WALLPAPER -> shuffleWallpaper(ctx)
             ACTION_VOL_UP -> adjustVolume(ctx, +0.08f)
             ACTION_VOL_DOWN -> adjustVolume(ctx, -0.08f)
             RelaxAudioService.ACTION_STATE -> refreshAll(ctx)
         }
+    }
+
+    /**
+     * Cycle the live wallpaper effect without needing the RN runtime: advance
+     * through a fixed set, persist the new value directly to the wallpaper
+     * prefs, and notify the engine via a broadcast. The engine re-reads prefs
+     * on every frame tick so the change is visible immediately.
+     */
+    private fun cycleEffect(ctx: Context) {
+        val wp = ctx.getSharedPreferences("relax_wallpaper_prefs", Context.MODE_PRIVATE)
+        val order = listOf("none", "snow", "rain", "bubbles", "leaves", "flowers", "particles", "fireflies", "fog", "frost")
+        val cur = wp.getString("effect_type", "none") ?: "none"
+        val next = order[(order.indexOf(cur).coerceAtLeast(0) + 1) % order.size]
+        wp.edit().putString("effect_type", next).apply()
+        ctx.getSharedPreferences("relax_widget", Context.MODE_PRIVATE)
+            .edit().putString("mode", next).apply()
+        ctx.sendBroadcast(Intent("${PKG}.EFFECT_CHANGED").setPackage(ctx.packageName).putExtra("effect", next))
+        refreshAll(ctx)
+    }
+
+    /**
+     * Pick a random image from the user's saved library (persisted by JS as a
+     * JSON array under key "wallpaper_library_json") and install it as the
+     * current live-wallpaper backdrop. Keeps working when the RN app is dead.
+     */
+    private fun shuffleWallpaper(ctx: Context) {
+        val widgetPrefs = ctx.getSharedPreferences("relax_widget", Context.MODE_PRIVATE)
+        val raw = widgetPrefs.getString("wallpaper_library_json", null) ?: return
+        try {
+            val arr = org.json.JSONArray(raw)
+            if (arr.length() == 0) return
+            val uri = arr.getJSONObject((Math.random() * arr.length()).toInt()).optString("uri", "")
+            if (uri.isBlank()) return
+            ctx.getSharedPreferences("relax_wallpaper_prefs", Context.MODE_PRIVATE)
+                .edit().putString("wallpaper_image_uri", uri).apply()
+            ctx.sendBroadcast(Intent("${PKG}.WALLPAPER_CHANGED").setPackage(ctx.packageName).putExtra("uri", uri))
+        } catch (_: Throwable) {}
     }
 
     private fun adjustVolume(ctx: Context, delta: Float) {
@@ -159,6 +186,28 @@ class RelaxWidgetModule(ctx: ReactApplicationContext) : ReactContextBaseJavaModu
         promise.resolve(true)
     }
 
+    /**
+     * Persist the user's image library so the Small/Medium/Large widgets can
+     * shuffle wallpaper offline (native code only, no JS round-trip).
+     */
+    @ReactMethod
+    fun setMediaLibrary(items: ReadableArray, promise: Promise) {
+        try {
+            val arr = org.json.JSONArray()
+            for (i in 0 until items.size()) {
+                val m = items.getMap(i) ?: continue
+                val type = m.getString("type") ?: "image"
+                if (type != "image") continue
+                arr.put(org.json.JSONObject().apply {
+                    put("uri", m.getString("uri") ?: "")
+                })
+            }
+            reactApplicationContext.getSharedPreferences("relax_widget", Context.MODE_PRIVATE)
+                .edit().putString("wallpaper_library_json", arr.toString()).apply()
+            promise.resolve(true)
+        } catch (t: Throwable) { promise.reject("MEDIA_LIB_FAIL", t) }
+    }
+
     @ReactMethod fun addListener(n: String) {}
     @ReactMethod fun removeListeners(n: Int) {}
 }
@@ -268,7 +317,8 @@ const withAppWidgetManifest = (config) =>
               { action: [{ $: { "android:name": "com.relaxsound.livewallpapers.widget.CYCLE_MODE" } }] },
               { action: [{ $: { "android:name": "com.relaxsound.livewallpapers.widget.CHANGE_WP" } }] },
               { action: [{ $: { "android:name": "com.relaxsound.livewallpapers.widget.VOL_UP" } }] },
-              { action: [{ $: { "android:name": "com.relaxsound.livewallpapers.widget.VOL_DOWN" } }] }
+              { action: [{ $: { "android:name": "com.relaxsound.livewallpapers.widget.VOL_DOWN" } }] },
+              { action: [{ $: { "android:name": "com.relaxsound.livewallpapers.audio.STATE" } }] }
             ],
             "meta-data": [
               {

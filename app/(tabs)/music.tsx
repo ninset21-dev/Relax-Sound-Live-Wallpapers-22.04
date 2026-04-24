@@ -98,13 +98,18 @@ export default function MusicScreen() {
           <Text style={styles.body}>{t("music.pickHint")}</Text>
           <PrimaryButton label={t("music.pick")} icon="folder-open-outline" onPress={pickTracks} style={{ marginTop: 8 }} />
           <View style={{ marginTop: 8 }}>
-            {app.tracks.slice(0, 12).map((tr, i) => (
-              <Pressable key={i} style={styles.trackRow} onPress={() => app.play(tr)}>
-                <Ionicons name="musical-note" size={16} color={theme.colors.accent} />
-                <Text style={styles.trackName} numberOfLines={1}>{tr.title}</Text>
-              </Pressable>
+            {app.tracks.map((tr, i) => (
+              <View key={i} style={styles.trackRow}>
+                <Pressable onPress={() => app.play(tr)} style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Ionicons name={app.currentTrack?.uri === tr.uri ? "musical-notes" : "musical-note"} size={16} color={theme.colors.accent} />
+                  <Text style={styles.trackName} numberOfLines={1}>{tr.title}</Text>
+                </Pressable>
+                <Pressable hitSlop={10} onPress={() => app.removeTrack(tr.uri)}>
+                  <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
+                </Pressable>
+              </View>
             ))}
-            {app.tracks.length === 0 && <Text style={styles.body}>—</Text>}
+            {app.tracks.length === 0 && <Text style={styles.body}>Выберите файлы через кнопку выше.</Text>}
           </View>
         </GlassCard>
 

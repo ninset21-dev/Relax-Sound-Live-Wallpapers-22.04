@@ -47,9 +47,26 @@ export async function searchStations(params: {
   qs.set("order", "clickcount");
   qs.set("reverse", "true");
   qs.set("limit", String(params.limit ?? 80));
+  // Request last-check-ok via is_https=false is not a real filter, but we
+  // additionally post-filter below using the fields returned by the API.
   const r = await fetch(`${s}/json/stations/search?${qs.toString()}`);
   if (!r.ok) return [];
-  return (await r.json()) as Station[];
+  const raw = (await r.json()) as (Station & {
+    lastcheckok?: number | boolean;
+    lastcheckoktime_iso8601?: string | null;
+  })[];
+  // Radio Browser marks broken stations with lastcheckok === 0 and, despite
+  // hidebroken=true, sometimes still returns them. Belt-and-braces filter:
+  // keep only stations with a resolvable URL, a non-zero bitrate, and a
+  // positive lastcheckok flag.
+  return raw.filter(
+    (s) =>
+      (s.url_resolved || s.url) &&
+      s.bitrate > 0 &&
+      (s.lastcheckok === undefined ||
+        s.lastcheckok === 1 ||
+        s.lastcheckok === true)
+  );
 }
 
 export async function popularByGenre(tag: string, quality: "auto" | "low" | "med" | "high"): Promise<Station[]> {
@@ -59,6 +76,31 @@ export async function popularByGenre(tag: string, quality: "auto" | "low" | "med
   const filtered = all.filter((s) => (bw === 0 ? true : s.bitrate <= bw && s.bitrate > 0));
   const ordered = filtered.length > 10 ? filtered : all;
   return ordered.slice(0, 50);
+}
+
+/**
+ * Actively probe station URLs for reachability. HEAD requests are often
+ * blocked by stream servers, so we do a short GET with a signal-abort after
+ * a tight timeout — a successful response (or any 2xx/3xx redirect) means
+ * the stream is alive.
+ */
+export async function probeStations(stations: Station[], timeoutMs = 2000): Promise<Station[]> {
+  const probe = async (s: Station): Promise<boolean> => {
+    const url = s.url_resolved || s.url;
+    if (!url) return false;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const r = await fetch(url, { method: "GET", signal: ctrl.signal });
+      return r.ok || r.status === 302 || r.status === 301;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  const results = await Promise.all(stations.map(probe));
+  return stations.filter((_, i) => results[i]);
 }
 
 async function bitrateCapFor(q: "auto" | "low" | "med" | "high"): Promise<number> {

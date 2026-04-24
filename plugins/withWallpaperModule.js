@@ -63,6 +63,7 @@ class RelaxWallpaperModule(reactContext: ReactApplicationContext) :
             val intensity = if (params.hasKey("intensity")) params.getDouble("intensity").toFloat() else 0.5f
             val speed = if (params.hasKey("speed")) params.getDouble("speed").toFloat() else 1.0f
             val fps = if (params.hasKey("fps")) params.getInt("fps") else 30
+            val videoAudio = if (params.hasKey("videoAudio")) params.getBoolean("videoAudio") else false
             prefs.edit()
                 .putString("wallpaper_video_uri", video)
                 .putString("wallpaper_image_uri", image)
@@ -70,6 +71,7 @@ class RelaxWallpaperModule(reactContext: ReactApplicationContext) :
                 .putFloat("effect_intensity", intensity)
                 .putFloat("effect_speed", speed)
                 .putInt("effect_fps", fps)
+                .putBoolean("wallpaper_video_audio", videoAudio)
                 .apply()
             val intent = Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
                 putExtra(
@@ -98,6 +100,7 @@ class RelaxWallpaperModule(reactContext: ReactApplicationContext) :
             if (params.hasKey("intensity")) e.putFloat("effect_intensity", params.getDouble("intensity").toFloat())
             if (params.hasKey("speed")) e.putFloat("effect_speed", params.getDouble("speed").toFloat())
             if (params.hasKey("fps")) e.putInt("effect_fps", params.getInt("fps"))
+            if (params.hasKey("videoAudio")) e.putBoolean("wallpaper_video_audio", params.getBoolean("videoAudio"))
             e.apply()
             promise.resolve(true)
         } catch (t: Throwable) { promise.reject("UPDATE_PARAMS_FAILED", t) }

@@ -50,10 +50,26 @@ class RelaxWallpaperService : WallpaperService() {
         private var effectRenderer: EffectRenderer? = null
         private var visible = false
         private var cachedBg: android.graphics.Bitmap? = null
+        private var cachedBgUri: String? = null
 
         private val frameTick = object : Runnable {
             override fun run() {
                 if (!visible) return
+                // React to wallpaper swap (auto-change / widget shuffle): if the
+                // stored imageUri changed, decode the new bitmap before drawing.
+                val newUri = prefs.getString("wallpaper_image_uri", null)
+                if (newUri != cachedBgUri) {
+                    try { cachedBg?.recycle() } catch (_: Throwable) {}
+                    cachedBg = null
+                    cachedBgUri = newUri
+                    if (!newUri.isNullOrBlank()) {
+                        try {
+                            contentResolver.openInputStream(Uri.parse(newUri))?.use { input ->
+                                cachedBg = BitmapFactory.decodeStream(input)
+                            }
+                        } catch (t: Throwable) { Log.e(TAG, "swap decode", t) }
+                    }
+                }
                 // Skip Canvas-based overlay while MediaPlayer owns the surface
                 // (locking the canvas on a surface attached to MediaPlayer would
                 // throw IllegalStateException / clobber video frames).
@@ -82,6 +98,18 @@ class RelaxWallpaperService : WallpaperService() {
                 putExtra("visible", v)
             }
             sendBroadcast(broadcast)
+            // If the wallpaper has sound-enabled video, ask the audio service to
+            // duck (dim) its stream while the video is visible, un-duck otherwise.
+            if (mediaPlayer != null && prefs.getBoolean("wallpaper_video_audio", false)) {
+                val ctx = this@RelaxWallpaperService
+                val cls = Class.forName("${pkg}.audio.RelaxAudioService")
+                val i = Intent(ctx, cls).apply {
+                    action = if (v) "${pkg}.audio.DUCK" else "${pkg}.audio.UNDUCK"
+                }
+                try {
+                    if (android.os.Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i) else ctx.startService(i)
+                } catch (_: Throwable) {}
+            }
             if (v) {
                 try { mediaPlayer?.start() } catch (_: Throwable) {}
                 handler.post(frameTick)
@@ -115,10 +143,11 @@ class RelaxWallpaperService : WallpaperService() {
             val imageUri = prefs.getString("wallpaper_image_uri", null)
             if (!videoUri.isNullOrBlank()) {
                 try {
+                    val audioEnabled = prefs.getBoolean("wallpaper_video_audio", false)
                     mediaPlayer = MediaPlayer().apply {
                         setDataSource(this@RelaxWallpaperService, Uri.parse(videoUri))
                         isLooping = true
-                        setVolume(0f, 0f)
+                        setVolume(if (audioEnabled) 1f else 0f, if (audioEnabled) 1f else 0f)
                         setSurface(holder.surface)
                         prepare()
                         start()
@@ -132,12 +161,28 @@ class RelaxWallpaperService : WallpaperService() {
             }
         }
 
+        /**
+         * Compute a centre-crop destination rect so wallpapers keep their aspect
+         * ratio instead of being stretched. Android's default Rect(0,0,w,h)
+         * stretches; we shrink/enlarge the source to fully cover the surface.
+         */
+        private fun centerCropDst(bmpW: Int, bmpH: Int, canW: Int, canH: Int): Rect {
+            if (bmpW == 0 || bmpH == 0) return Rect(0, 0, canW, canH)
+            val scale = maxOf(canW.toFloat() / bmpW, canH.toFloat() / bmpH)
+            val dstW = (bmpW * scale).toInt()
+            val dstH = (bmpH * scale).toInt()
+            val dx = (canW - dstW) / 2
+            val dy = (canH - dstH) / 2
+            return Rect(dx, dy, dx + dstW, dy + dstH)
+        }
+
         private fun drawImage(holder: SurfaceHolder, uri: String?) {
             if (uri != null) {
                 try {
                     contentResolver.openInputStream(Uri.parse(uri))?.use { input ->
                         cachedBg = BitmapFactory.decodeStream(input)
                     }
+                    cachedBgUri = uri
                 } catch (t: Throwable) {
                     Log.e(TAG, "decode image failed", t)
                 }
@@ -146,7 +191,7 @@ class RelaxWallpaperService : WallpaperService() {
             try {
                 canvas.drawColor(Color.parseColor("#0b1f14"))
                 cachedBg?.let { bmp ->
-                    canvas.drawBitmap(bmp, null, Rect(0, 0, canvas.width, canvas.height), null)
+                    canvas.drawBitmap(bmp, null, centerCropDst(bmp.width, bmp.height, canvas.width, canvas.height), null)
                 }
             } finally {
                 try { holder.unlockCanvasAndPost(canvas) } catch (_: Throwable) {}
@@ -162,7 +207,7 @@ class RelaxWallpaperService : WallpaperService() {
                 // so without this the screen would flash black between effect frames.
                 canvas.drawColor(Color.parseColor("#0b1f14"))
                 cachedBg?.let { bmp ->
-                    canvas.drawBitmap(bmp, null, Rect(0, 0, canvas.width, canvas.height), null)
+                    canvas.drawBitmap(bmp, null, centerCropDst(bmp.width, bmp.height, canvas.width, canvas.height), null)
                 }
                 if (effect != "none") {
                     effectRenderer?.drawOverlay(
