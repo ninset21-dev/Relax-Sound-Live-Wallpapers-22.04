@@ -43,6 +43,7 @@ interface AudioModuleI {
 interface WidgetModuleI {
   updateWidgetState(title: string, volume: number, mode: string): Promiselike<boolean>;
   setMediaLibrary(items: { uri: string; type: string }[]): Promiselike<boolean>;
+  setAutoChange(enabled: boolean, seconds: number): Promiselike<boolean>;
 }
 interface FloatingModuleI {
   hasOverlayPermission(): Promiselike<boolean>;

@@ -197,15 +197,33 @@ class RelaxWidgetModule(ctx: ReactApplicationContext) : ReactContextBaseJavaModu
             for (i in 0 until items.size()) {
                 val m = items.getMap(i) ?: continue
                 val type = m.getString("type") ?: "image"
-                if (type != "image") continue
                 arr.put(org.json.JSONObject().apply {
                     put("uri", m.getString("uri") ?: "")
+                    put("type", type)
                 })
             }
             reactApplicationContext.getSharedPreferences("relax_widget", Context.MODE_PRIVATE)
                 .edit().putString("wallpaper_library_json", arr.toString()).apply()
             promise.resolve(true)
         } catch (t: Throwable) { promise.reject("MEDIA_LIB_FAIL", t) }
+    }
+
+    /**
+     * Persist auto-change settings into the shared "relax_widget" prefs so the
+     * native LiveWallpaperService engine can perform the periodic swap itself
+     * (works even when the JS bundle is not running — e.g. phone rebooted and
+     * user never opened the app again).
+     */
+    @ReactMethod
+    fun setAutoChange(enabled: Boolean, seconds: Int, promise: Promise) {
+        try {
+            reactApplicationContext.getSharedPreferences("relax_widget", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("autochange_enabled", enabled)
+                .putInt("autochange_sec", seconds.coerceAtLeast(10))
+                .apply()
+            promise.resolve(true)
+        } catch (t: Throwable) { promise.reject("AUTOCHANGE_FAIL", t) }
     }
 
     @ReactMethod fun addListener(n: String) {}

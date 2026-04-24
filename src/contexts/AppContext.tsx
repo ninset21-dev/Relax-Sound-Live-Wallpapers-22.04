@@ -161,18 +161,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     Widget.setMediaLibrary(state.mediaLibrary.map((m) => ({ uri: m.uri, type: m.type }))).catch(() => {});
   }, [state.mediaLibrary]);
 
-  // Auto-change timer: every N seconds, pick the next image in the library
-  // and push it to the native wallpaper engine. The engine re-reads prefs on
-  // each frame tick so the swap is seamless.
+  // Auto-change: persist the setting into the widget prefs so the native
+  // LiveWallpaperService engine can rotate media on its own (works in the
+  // background even when the JS bundle isn't running). Also keep a
+  // foreground-only JS timer as a safety net / for immediate UI feedback.
   useEffect(() => {
+    Widget.setAutoChange(state.autoChangeEnabled, state.autoChangeSec).catch(() => {});
     if (!state.autoChangeEnabled || state.mediaLibrary.length < 2) return;
-    const images = state.mediaLibrary.filter((m) => m.type === "image");
-    if (images.length < 2) return;
+    const items = state.mediaLibrary;
     let i = 0;
     const id = setInterval(() => {
-      i = (i + 1) % images.length;
-      const pick = images[i];
-      Wallpaper.updateWallpaperParams({ imageUri: pick.uri }).catch(() => {});
+      i = (i + 1) % items.length;
+      const pick = items[i];
+      Wallpaper.updateWallpaperParams(
+        pick.type === "video" ? { videoUri: pick.uri } : { imageUri: pick.uri }
+      ).catch(() => {});
     }, Math.max(10, state.autoChangeSec) * 1000);
     return () => clearInterval(id);
   }, [state.autoChangeEnabled, state.autoChangeSec, state.mediaLibrary]);

@@ -51,10 +51,45 @@ class RelaxWallpaperService : WallpaperService() {
         private var visible = false
         private var cachedBg: android.graphics.Bitmap? = null
         private var cachedBgUri: String? = null
+        private var lastAutoSwapMs: Long = 0L
+        private var autoSwapIndex: Int = 0
+
+        private fun maybeAutoSwap() {
+            val widgetPrefs = getSharedPreferences("relax_widget", Context.MODE_PRIVATE)
+            val enabled = widgetPrefs.getBoolean("autochange_enabled", false)
+            if (!enabled) return
+            val intervalSec = widgetPrefs.getInt("autochange_sec", 60).coerceAtLeast(10)
+            val now = System.currentTimeMillis()
+            if (now - lastAutoSwapMs < intervalSec * 1000L) return
+            val raw = widgetPrefs.getString("wallpaper_library_json", null) ?: return
+            try {
+                val arr = org.json.JSONArray(raw)
+                if (arr.length() < 2) return
+                autoSwapIndex = (autoSwapIndex + 1) % arr.length()
+                val item = arr.getJSONObject(autoSwapIndex)
+                val uri = item.optString("uri", "")
+                val type = item.optString("type", "image")
+                if (uri.isBlank()) return
+                val key = if (type == "video") "wallpaper_video_uri" else "wallpaper_image_uri"
+                val clearKey = if (type == "video") "wallpaper_image_uri" else "wallpaper_video_uri"
+                prefs.edit().putString(key, uri).remove(clearKey).apply()
+                lastAutoSwapMs = now
+                // If we just switched to a video but currently have no player,
+                // tear down the engine and force setupMedia() next frame by
+                // nulling cache.
+                if (type == "video" && mediaPlayer == null) {
+                    setupMedia(surfaceHolder)
+                } else if (type == "image" && mediaPlayer != null) {
+                    try { mediaPlayer?.stop(); mediaPlayer?.release() } catch (_: Throwable) {}
+                    mediaPlayer = null
+                }
+            } catch (t: Throwable) { Log.e(TAG, "autoswap", t) }
+        }
 
         private val frameTick = object : Runnable {
             override fun run() {
                 if (!visible) return
+                maybeAutoSwap()
                 // React to wallpaper swap (auto-change / widget shuffle): if the
                 // stored imageUri changed, decode the new bitmap before drawing.
                 val newUri = prefs.getString("wallpaper_image_uri", null)
