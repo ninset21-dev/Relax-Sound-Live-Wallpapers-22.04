@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { ScrollView, View, Text, StyleSheet, Pressable, Modal, Dimensions } from "react-native";
+import React from "react";
+import { ScrollView, View, Text, StyleSheet, Pressable } from "react-native";
 import Slider from "@react-native-community/slider";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
@@ -8,7 +8,6 @@ import { BackgroundGradient } from "@/components/BackgroundGradient";
 import { GlassCard } from "@/components/GlassCard";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { Hint } from "@/components/Hint";
-import { EffectPreview } from "@/components/EffectPreview";
 import { theme } from "@/theme/theme";
 import { useApp, EffectKind } from "@/contexts/AppContext";
 
@@ -34,8 +33,6 @@ export default function EffectsScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const app = useApp();
-  const [fullscreen, setFullscreen] = useState(false);
-  const { width: winW, height: winH } = Dimensions.get("window");
 
   return (
     <BackgroundGradient>
@@ -50,17 +47,34 @@ export default function EffectsScreen() {
           </View>
         </View>
 
-        <Pressable onPress={() => setFullscreen(true)}>
-          <GlassCard padding={0}>
-            <View style={{ height: 280 }}>
-              <EffectPreview effect={app.effect} intensity={app.intensity} speed={app.speed} height={280} />
-              <View style={styles.previewTag}>
-                <Ionicons name="expand-outline" size={14} color={theme.colors.textPrimary} />
-                <Text style={styles.previewTagText}>Открыть на весь экран</Text>
-              </View>
+        {/* The effect already renders across the whole app via
+            GlobalEffectLayer (in BackgroundGradient). Instead of showing a
+            boxed mini-preview here, give a short status card — the visible
+            effect IS the preview. */}
+        <GlassCard>
+          <View style={[styles.rowBetween]}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardHead}>
+                {t("effects.title")}
+              </Text>
+              <Text style={[styles.label, { marginTop: 4 }]}>
+                {app.effect === "none"
+                  ? t("effects.noneDesc")
+                  : t("effects.liveAround")}
+              </Text>
             </View>
-          </GlassCard>
-        </Pressable>
+            <View style={[styles.badgeOk, { marginLeft: 10 }]}>
+              <Ionicons
+                name={app.effect === "none" ? "ban-outline" : "sparkles"}
+                size={12}
+                color="#0b1f14"
+              />
+              <Text style={[styles.badgeOkText, { marginLeft: 4 }]}>
+                {app.effect === "none" ? t("common.off") : t("common.on")}
+              </Text>
+            </View>
+          </View>
+        </GlassCard>
 
         <GlassCard>
           <Text style={styles.cardHead}>Engine Performance</Text>
@@ -143,36 +157,8 @@ export default function EffectsScreen() {
           style={{ marginTop: 8 }}
         />
 
-        <Hint text="Эффекты синхронизированы: в приложении, на главном экране и на экране блокировки отображается одно и то же." />
+        <Hint text={t("effects.syncHint")} />
       </ScrollView>
-
-      <Modal visible={fullscreen} animationType="fade" onRequestClose={() => setFullscreen(false)} transparent={false}>
-        <View style={{ flex: 1, backgroundColor: "#000" }}>
-          <EffectPreview
-            effect={app.effect}
-            intensity={app.intensity}
-            speed={app.speed}
-            width={winW}
-            height={winH}
-          />
-          <Pressable
-            onPress={() => setFullscreen(false)}
-            style={{ position: "absolute", top: insets.top + 14, right: 16, width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(0,0,0,0.55)", alignItems: "center", justifyContent: "center" }}
-            hitSlop={10}
-          >
-            <Ionicons name="close" size={22} color="#fff" />
-          </Pressable>
-          <View style={{ position: "absolute", bottom: insets.bottom + 20, left: 16, right: 16, backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 18, padding: 14 }}>
-            <Text style={{ color: "#fff", fontSize: 13, marginBottom: 6 }}>
-              {app.effect === "none" ? "Эффект отключён" : `Эффект: ${app.effect}`}
-            </Text>
-            <Slider minimumValue={0} maximumValue={1} value={app.intensity} step={0.01}
-              minimumTrackTintColor={theme.colors.accent} maximumTrackTintColor="rgba(255,255,255,0.25)"
-              thumbTintColor={theme.colors.accent}
-              onValueChange={(v) => app.setIntensity(v)} />
-          </View>
-        </View>
-      </Modal>
     </BackgroundGradient>
   );
 }

@@ -4,6 +4,7 @@ import Slider from "@react-native-community/slider";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
 import i18n from "i18next";
+import { SUPPORTED_LANGUAGES, applyLanguage } from "@/i18n";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BackgroundGradient } from "@/components/BackgroundGradient";
 import { GlassCard } from "@/components/GlassCard";
@@ -36,9 +37,10 @@ export default function SettingsScreen() {
   const [termsOpen, setTermsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
 
-  const pickLanguage = async (l: "system" | "ru" | "en") => {
-    app.setLanguage(l);
-    try { await i18n.changeLanguage(l === "system" ? undefined : l); } catch {}
+  const pickLanguage = async (l: string) => {
+    // persist choice (system | en | ru | es | pt | de | fr | it | tr | ja | zh | ar)
+    app.setLanguage(l as any);
+    try { applyLanguage(l); } catch {}
   };
 
   const openA11yFlow = async () => {
@@ -57,10 +59,18 @@ export default function SettingsScreen() {
         <GlassCard>
           <Text style={styles.sectionTitle}>{t("settings.language")}</Text>
           <Text style={styles.body}>{t("settings.languageHint")}</Text>
-          <View style={[styles.row, { marginTop: 8, gap: 6 }]}>
-            <PrimaryButton label="Система" variant={app.language === "system" ? "primary" : "secondary"} onPress={() => pickLanguage("system")} style={{ flex: 1 }} />
-            <PrimaryButton label="Русский" variant={app.language === "ru" ? "primary" : "secondary"} onPress={() => pickLanguage("ru")} style={{ flex: 1 }} />
-            <PrimaryButton label="English" variant={app.language === "en" ? "primary" : "secondary"} onPress={() => pickLanguage("en")} style={{ flex: 1 }} />
+          <View style={[styles.row, { marginTop: 8, flexWrap: "wrap", gap: 6 }]}>
+            {SUPPORTED_LANGUAGES.map((lang) => (
+              <Pressable
+                key={lang.code}
+                onPress={() => pickLanguage(lang.code)}
+                style={[styles.langChip, app.language === lang.code && styles.langChipActive]}
+              >
+                <Text style={[styles.langChipText, app.language === lang.code && styles.langChipTextActive]}>
+                  {lang.label}
+                </Text>
+              </Pressable>
+            ))}
           </View>
         </GlassCard>
 
@@ -81,7 +91,7 @@ export default function SettingsScreen() {
           <Text style={styles.body}>{t("settings.uiOpacityHint")}</Text>
           <Text style={[styles.body, { marginTop: 6 }]}>{Math.round(app.uiOpacity * 100)}%</Text>
           <Slider
-            minimumValue={0.3}
+            minimumValue={0}
             maximumValue={1}
             value={app.uiOpacity}
             step={0.01}
@@ -251,5 +261,17 @@ const styles = StyleSheet.create({
   modalBox: { width: "100%", maxWidth: 480, backgroundColor: "#112a1d", borderRadius: 20, padding: 20, borderWidth: 1, borderColor: theme.colors.border },
   modalH: { color: theme.colors.textPrimary, fontSize: 18, fontWeight: "700", marginBottom: 8 },
   modalBody: { color: theme.colors.textSecondary, fontSize: 14, lineHeight: 21 },
-  aboutBig: { color: theme.colors.textPrimary, fontSize: 22, fontWeight: "700" }
+  aboutBig: { color: theme.colors.textPrimary, fontSize: 22, fontWeight: "700" },
+  langChip: {
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: theme.radii.pill,
+    backgroundColor: "rgba(34, 197, 94, 0.08)",
+    borderWidth: 1, borderColor: theme.colors.border,
+    marginRight: 6, marginBottom: 6
+  },
+  langChipActive: {
+    backgroundColor: "rgba(34, 197, 94, 0.22)",
+    borderColor: theme.colors.accentGlow
+  },
+  langChipText: { color: theme.colors.textSecondary, fontSize: theme.font.size.sm, fontWeight: "600" },
+  langChipTextActive: { color: theme.colors.textPrimary }
 });

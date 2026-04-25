@@ -57,6 +57,13 @@ class RelaxWallpaperService : WallpaperService() {
         private var visible = false
         private var cachedBg: android.graphics.Bitmap? = null
         private var cachedBgUri: String? = null
+        // Previous bitmap kept alive while a crossfade is running so old and
+        // new wallpapers can both be drawn with opposing alphas. Produces a
+        // smooth fade-in on auto-change / widget-shuffle instead of an abrupt
+        // swap.
+        private var prevBg: android.graphics.Bitmap? = null
+        private var fadeStartMs: Long = 0
+        private val fadeDurationMs: Long = 900
         // Start the auto-swap "clock" from engine creation so the first swap
         // fires after the user's configured interval instead of immediately
         // on device boot / wallpaper reload.
@@ -159,9 +166,14 @@ class RelaxWallpaperService : WallpaperService() {
                                 // If another swap happened while we were
                                 // decoding, drop this stale bitmap.
                                 if (cachedBgUri == newUri) {
-                                    val old = cachedBg
+                                    // Start a crossfade: keep the old bitmap
+                                    // as prevBg for fadeDurationMs; drawFrame
+                                    // draws both with opposing alphas during
+                                    // this window, producing a smooth swap.
+                                    try { prevBg?.recycle() } catch (_: Throwable) {}
+                                    prevBg = cachedBg
                                     cachedBg = bm
-                                    try { old?.recycle() } catch (_: Throwable) {}
+                                    fadeStartMs = System.currentTimeMillis()
                                 } else {
                                     try { bm?.recycle() } catch (_: Throwable) {}
                                 }
@@ -229,8 +241,12 @@ class RelaxWallpaperService : WallpaperService() {
             handler.removeCallbacks(frameTick)
             try { mediaPlayer?.release() } catch (_: Throwable) {}
             mediaPlayer = null
+            cachedVideoUri = null
             try { cachedBg?.recycle() } catch (_: Throwable) {}
             cachedBg = null
+            cachedBgUri = null
+            try { prevBg?.recycle() } catch (_: Throwable) {}
+            prevBg = null
             super.onSurfaceDestroyed(holder)
         }
 
@@ -262,6 +278,11 @@ class RelaxWallpaperService : WallpaperService() {
                         prepare()
                         start()
                     }
+                    // Track that we've bound this URI so frameTick's change
+                    // detector doesn't immediately tear the player down on
+                    // the very next frame (Devin Review fix).
+                    cachedVideoUri = videoUri
+                    lastAppliedVideoVolume = vol
                 } catch (t: Throwable) {
                     Log.e(TAG, "video init failed", t)
                     drawImage(holder, imageUri)
@@ -329,8 +350,31 @@ class RelaxWallpaperService : WallpaperService() {
                 // Always repaint the backdrop first — lockCanvas returns a fresh buffer
                 // so without this the screen would flash black between effect frames.
                 canvas.drawColor(Color.parseColor("#0b1f14"))
-                cachedBg?.let { bmp ->
-                    canvas.drawBitmap(bmp, null, centerCropDst(bmp.width, bmp.height, canvas.width, canvas.height), null)
+                // Crossfade handling: when prevBg is non-null and fadeStartMs
+                // is recent, blend old wallpaper out and new wallpaper in.
+                val now = System.currentTimeMillis()
+                val elapsed = now - fadeStartMs
+                val fadeActive = prevBg != null && elapsed in 0..fadeDurationMs
+                if (fadeActive) {
+                    val t = (elapsed.toFloat() / fadeDurationMs).coerceIn(0f, 1f)
+                    val paint = android.graphics.Paint()
+                    prevBg?.let { pb ->
+                        paint.alpha = ((1f - t) * 255).toInt().coerceIn(0, 255)
+                        canvas.drawBitmap(pb, null, centerCropDst(pb.width, pb.height, canvas.width, canvas.height), paint)
+                    }
+                    cachedBg?.let { bmp ->
+                        paint.alpha = (t * 255).toInt().coerceIn(0, 255)
+                        canvas.drawBitmap(bmp, null, centerCropDst(bmp.width, bmp.height, canvas.width, canvas.height), paint)
+                    }
+                } else {
+                    // Fade complete — release the old bitmap once.
+                    if (prevBg != null && elapsed > fadeDurationMs) {
+                        try { prevBg?.recycle() } catch (_: Throwable) {}
+                        prevBg = null
+                    }
+                    cachedBg?.let { bmp ->
+                        canvas.drawBitmap(bmp, null, centerCropDst(bmp.width, bmp.height, canvas.width, canvas.height), null)
+                    }
                 }
                 if (effect != "none") {
                     effectRenderer?.drawOverlay(

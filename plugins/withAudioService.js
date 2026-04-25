@@ -509,14 +509,31 @@ class RelaxAudioModule(reactContext: ReactApplicationContext) :
     fun setVolume(vol: Double, promise: Promise) {
         try {
             val ctx = reactApplicationContext
+            val v = vol.toFloat().coerceIn(0f, 1f)
+            // Persist immediately so the widget/UI stay in sync even if the
+            // service isn't running yet (API 31+ disallows plain startService
+            // from background).
+            ctx.getSharedPreferences("relax_audio", Context.MODE_PRIVATE)
+                .edit().putFloat("vol", v).apply()
+            // Broadcast ACTION_STATE right now (preserving the currently
+            // persisted isPlaying + title + repeat) so widgets/floating/UI
+            // all see the new volume in the next frame — not only after the
+            // service eventually processes ACTION_VOLUME. This is what makes
+            // the slider on one widget update every other widget in real
+            // time.
+            val prefs = ctx.getSharedPreferences("relax_audio", Context.MODE_PRIVATE)
+            ctx.sendBroadcast(
+                Intent(RelaxAudioService.ACTION_STATE)
+                    .setPackage(ctx.packageName)
+                    .putExtra("title", prefs.getString("title", "Relax Sound"))
+                    .putExtra("isPlaying", prefs.getBoolean("was_playing", false))
+                    .putExtra("volume", v)
+                    .putExtra("repeatMode", prefs.getString("repeat_mode", "off"))
+            )
             val i = Intent(ctx, RelaxAudioService::class.java).apply {
                 action = RelaxAudioService.ACTION_VOLUME
-                putExtra(RelaxAudioService.EXTRA_VOLUME, vol.toFloat())
+                putExtra(RelaxAudioService.EXTRA_VOLUME, v)
             }
-            // Persist immediately so the widget/UI stay in sync even if the service
-            // isn't running yet (API 31+ disallows plain startService from background).
-            ctx.getSharedPreferences("relax_audio", Context.MODE_PRIVATE)
-                .edit().putFloat("vol", vol.toFloat()).apply()
             if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i) else ctx.startService(i)
             promise.resolve(true)
         } catch (t: Throwable) { promise.reject("VOLUME_FAIL", t) }

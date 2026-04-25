@@ -84,7 +84,7 @@ export async function popularByGenre(tag: string, quality: "auto" | "low" | "med
  * a tight timeout — a successful response (or any 2xx/3xx redirect) means
  * the stream is alive.
  */
-export async function probeStations(stations: Station[], timeoutMs = 2000): Promise<Station[]> {
+export async function probeStations(stations: Station[], timeoutMs = 3500): Promise<Station[]> {
   const probe = async (s: Station): Promise<boolean> => {
     const url = s.url_resolved || s.url;
     if (!url) return false;
@@ -92,7 +92,22 @@ export async function probeStations(stations: Station[], timeoutMs = 2000): Prom
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
       const r = await fetch(url, { method: "GET", signal: ctrl.signal });
-      return r.ok || r.status === 302 || r.status === 301;
+      if (!(r.ok || r.status === 302 || r.status === 301)) return false;
+      // Stricter check: require an audio/* content-type. Many "working"
+      // stations actually serve an HTML error page or a playlist (.m3u/.pls)
+      // that ExoPlayer can't open reliably, so we filter those out here.
+      const ct = (r.headers.get("content-type") || "").toLowerCase();
+      if (
+        ct.includes("audio/") ||
+        ct.includes("application/ogg") ||
+        ct.includes("application/octet-stream")
+      ) return true;
+      // Some servers don't return Content-Type on the stream endpoint;
+      // fall back to accepting the response if URL ends with a known audio
+      // extension.
+      const low = url.toLowerCase().split("?")[0];
+      if (/\.(mp3|aac|ogg|m4a|flac|wav|opus|webm)$/.test(low)) return true;
+      return false;
     } catch {
       return false;
     } finally {

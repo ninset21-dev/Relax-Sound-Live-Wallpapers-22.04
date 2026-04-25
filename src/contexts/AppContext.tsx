@@ -42,15 +42,21 @@ interface AppState_ {
   autoChangeEnabled: boolean;
   autoChangeSec: number;
   videoAudio: boolean;
-  language: "system" | "ru" | "en";
+  language:
+    | "system"
+    | "en" | "ru" | "es" | "pt" | "de" | "fr" | "it" | "tr" | "ja" | "zh" | "ar";
   overlayEnabled: boolean;
   a11yEnabled: boolean;
   liveWallpaperActive: boolean;
   repeatMode: RepeatMode;
   uiOpacity: number;
+  // URI of the wallpaper image currently applied (drives the blurred
+  // app background so the UI reflects the user's chosen scene).
+  currentWallpaperUri?: string;
 }
 type Ctx = AppState_ & {
   addMedia(items: MediaItem[]): void;
+  setMedia(items: MediaItem[]): void;
   removeMedia(uri: string): void;
   removeMediaMany(uris: string[]): void;
   clearMedia(): void;
@@ -69,7 +75,7 @@ type Ctx = AppState_ & {
   setAutoChangeSec(n: number): void;
   setVideoAudio(on: boolean): void;
   toggleRepeat(): void;
-  setLanguage(l: "system" | "ru" | "en"): void;
+  setLanguage(l: AppState_["language"]): void;
   setUiOpacity(v: number): void;
   play(t: Track): Promise<void>;
   togglePlay(): Promise<void>;
@@ -120,7 +126,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     (async () => {
       const raw = await AsyncStorage.getItem(STORAGE_KEY);
-      if (raw) { try { setState((p) => ({ ...p, ...JSON.parse(raw) })); } catch {} }
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          setState((p) => ({ ...p, ...parsed }));
+          // Apply persisted language to i18next right after hydrate so all
+          // screens render in the correct language before first paint.
+          if (parsed?.language) {
+            try {
+              const { applyLanguage } = require("@/i18n");
+              applyLanguage(parsed.language);
+            } catch {}
+          }
+        } catch {}
+      }
       try { const active = await Wallpaper.isLiveWallpaperActive(); persist({ liveWallpaperActive: !!active }); } catch {}
       try { const a11y = await Accessibility.isEnabled(); persist({ a11yEnabled: !!a11y }); } catch {}
     })();
@@ -168,6 +187,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // floating controls can walk tracks and shuffle wallpapers without the
   // JS runtime.
   useEffect(() => {
+    // Only (re)push the local tracks playlist when the currently-selected
+    // item is actually a local track. If the user is listening to a radio
+    // station, music.tsx has already pushed the stations list as the native
+    // playlist and we must not overwrite it (doing so broke widget NEXT/PREV
+    // when listening to radio).
+    const isLocal = state.currentTrack
+      ? state.tracks.some((t) => t.uri === state.currentTrack!.uri)
+      : true;
+    if (!isLocal) return;
     const idx = state.currentTrack
       ? Math.max(0, state.tracks.findIndex((t) => t.uri === state.currentTrack!.uri))
       : 0;
@@ -205,6 +233,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     () => ({
       ...state,
       addMedia: (items) => persist({ mediaLibrary: [...state.mediaLibrary, ...items] }),
+      setMedia: (items) => persist({ mediaLibrary: items }),
       removeMedia: (uri) =>
         persist({ mediaLibrary: state.mediaLibrary.filter((m) => m.uri !== uri) }),
       removeMediaMany: (uris) => {
@@ -250,8 +279,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // state broadcast will sync it.
         Audio.toggleRepeat?.().catch(() => {});
       },
-      setLanguage: (l) => persist({ language: l }),
-      setUiOpacity: (v) => persist({ uiOpacity: Math.max(0.3, Math.min(1, v)) }),
+      setLanguage: (l) => {
+        persist({ language: l });
+        try {
+          // Lazy import to avoid circular deps at module init time.
+          const { applyLanguage } = require("@/i18n");
+          applyLanguage(l);
+        } catch {}
+      },
+      // Opacity is now 0-100% (shows through to underlying wallpaper when
+      // lowered). Previous 30% floor was removed per user request.
+      setUiOpacity: (v) => persist({ uiOpacity: Math.max(0, Math.min(1, v)) }),
       play: async (t) => {
         persist({ currentTrack: t });
         try {
@@ -282,6 +320,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         try {
           const video = state.mediaLibrary.find((m) => m.type === "video");
           const image = state.mediaLibrary.find((m) => m.type === "image");
+          // For LOCK-only installs Android needs the image applied as a
+          // static wallpaper to the LOCK surface BEFORE the live wallpaper
+          // intent (otherwise Android paints the live wallpaper over lock
+          // anyway). For HOME-only we do the same with the other surface.
+          if (mode === "lock" && image) {
+            await Wallpaper.setStaticWallpaper(image.uri, "lock");
+            // Skip the live-wallpaper picker so the lock-screen static
+            // survives — live wallpapers always bind to HOME on Android
+            // <14, which would clobber the dedicated lock image.
+            persist({ liveWallpaperActive: true, currentWallpaperUri: image.uri });
+            return;
+          }
           await Wallpaper.setLiveWallpaper({
             videoUri: video?.uri ?? null,
             imageUri: image?.uri ?? null,
@@ -291,16 +341,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             speed: state.speed,
             fps: state.fps
           });
-          // Android's ACTION_CHANGE_LIVE_WALLPAPER installs on SYSTEM by
-          // default; to install only on lock we still use that intent (the
-          // live wallpaper goes on both) but also set a static image on the
-          // other surface. For HOME-only we apply a static to LOCK; for
-          // LOCK-only we apply a static to HOME.
-          if (mode !== "both" && image) {
-            const other: "home" | "lock" = mode === "home" ? "lock" : "home";
-            await Wallpaper.setStaticWallpaper(image.uri, other);
+          if (mode === "home" && image) {
+            // HOME-only: keep an explicit static on LOCK so the live
+            // wallpaper doesn't bleed onto the lock screen.
+            await Wallpaper.setStaticWallpaper(image.uri, "lock");
           }
-          persist({ liveWallpaperActive: true });
+          persist({
+            liveWallpaperActive: true,
+            currentWallpaperUri: image?.uri ?? state.currentWallpaperUri
+          });
         } catch (e) { console.warn("apply wallpaper fail", e); }
       },
       refreshA11y: async () => {

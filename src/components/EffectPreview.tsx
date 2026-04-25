@@ -20,7 +20,8 @@ export const EffectPreview: React.FC<{
   speed: number;
   width?: number;
   height?: number;
-}> = ({ effect, intensity, speed, width, height }) => {
+  transparent?: boolean;
+}> = ({ effect, intensity, speed, width, height, transparent }) => {
   const screen = Dimensions.get("window");
   const W = width ?? Math.min(screen.width - 32, 700);
   const H = height ?? 360;
@@ -66,15 +67,19 @@ export const EffectPreview: React.FC<{
   }, [effect, speed, W, H, targetCount]);
 
   return (
-    <View style={[styles.wrap, { width: W, height: H }]}>
+    <View style={[styles.wrap, { width: W, height: H, backgroundColor: transparent ? "transparent" : "#0b1f14" }]}>
       <Svg width={W} height={H}>
-        <Defs>
-          <RadialGradient id="bg" cx="50%" cy="40%" r="70%">
-            <Stop offset="0%" stopColor="#163b2a" stopOpacity="1" />
-            <Stop offset="100%" stopColor="#0b1f14" stopOpacity="1" />
-          </RadialGradient>
-        </Defs>
-        <Rect x={0} y={0} width={W} height={H} fill="url(#bg)" />
+        {!transparent && (
+          <>
+            <Defs>
+              <RadialGradient id="bg" cx="50%" cy="40%" r="70%">
+                <Stop offset="0%" stopColor="#163b2a" stopOpacity="1" />
+                <Stop offset="100%" stopColor="#0b1f14" stopOpacity="1" />
+              </RadialGradient>
+            </Defs>
+            <Rect x={0} y={0} width={W} height={H} fill="url(#bg)" />
+          </>
+        )}
         {particlesRef.current.map((p, i) => renderParticle(effect, p, i))}
       </Svg>
     </View>

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ScrollView, View, Text, StyleSheet, Pressable } from "react-native";
+import { ScrollView, View, Text, StyleSheet, Pressable, Alert } from "react-native";
 import Slider from "@react-native-community/slider";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
@@ -12,6 +12,7 @@ import { Hint } from "@/components/Hint";
 import { theme } from "@/theme/theme";
 import { useApp, Track } from "@/contexts/AppContext";
 import { GENRES, popularByGenre, probeStations, Station } from "@/services/radio";
+import { Audio } from "@/native";
 
 export default function MusicScreen() {
   const { t } = useTranslation();
@@ -20,6 +21,7 @@ export default function MusicScreen() {
   const [genre, setGenre] = useState("relax");
   const [stations, setStations] = useState<Station[]>([]);
   const [loading, setLoading] = useState(false);
+  const [trackSel, setTrackSel] = useState<Set<string>>(new Set());
   const genreRef = useRef(genre);
   useEffect(() => { genreRef.current = genre; }, [genre]);
 
@@ -52,7 +54,19 @@ export default function MusicScreen() {
   useEffect(() => { loadGenre(genre); }, []);
 
   const playStation = (s: Station) => {
-    app.play({ uri: s.url_resolved || s.url, title: s.name.trim() });
+    // Replace the native "playlist" with the currently visible station list
+    // so widget NEXT/PREV step through radio stations instead of local files.
+    // Without this, tapping NEXT on a widget while listening to radio would
+    // jump into the local-tracks list (or no-op), which was the source of
+    // "on widgets radio stations can't be switched" glitches.
+    const url = s.url_resolved || s.url;
+    const title = s.name.trim();
+    const items = stations
+      .filter((st) => st.url_resolved || st.url)
+      .map((st) => ({ uri: st.url_resolved || st.url, title: st.name.trim() }));
+    const idx = Math.max(0, items.findIndex((it) => it.uri === url));
+    Audio.setPlaylist(items, idx).catch(() => {});
+    app.play({ uri: url, title });
   };
 
   const current = app.currentTrack;
@@ -122,19 +136,82 @@ export default function MusicScreen() {
           <Text style={styles.sectionTitle}>{t("music.local")}</Text>
           <Text style={styles.body}>{t("music.pickHint")}</Text>
           <PrimaryButton label={t("music.pick")} icon="folder-open-outline" onPress={pickTracks} style={{ marginTop: 8 }} />
+          {app.tracks.length > 0 && (
+            <View style={[styles.row, { marginTop: 8, gap: 6 }]}>
+              <Pressable
+                style={styles.ghostBtn}
+                onPress={() =>
+                  setTrackSel(
+                    trackSel.size === app.tracks.length
+                      ? new Set()
+                      : new Set(app.tracks.map((tr) => tr.uri))
+                  )
+                }
+              >
+                <Ionicons name="checkmark-done" size={14} color={theme.colors.accentGlow} />
+                <Text style={styles.ghostBtnText}>
+                  {trackSel.size === app.tracks.length && app.tracks.length > 0
+                    ? t("home.deselectAll")
+                    : t("music.selectAll")}
+                </Text>
+              </Pressable>
+              {trackSel.size > 0 && (
+                <Pressable
+                  style={[styles.ghostBtn, { backgroundColor: "rgba(255, 107, 107, 0.18)" }]}
+                  onPress={() => {
+                    Alert.alert(
+                      t("common.confirm"),
+                      `${t("music.deleteSelected")} (${trackSel.size})?`,
+                      [
+                        { text: t("common.cancel"), style: "cancel" },
+                        {
+                          text: t("common.delete"),
+                          style: "destructive",
+                          onPress: () => {
+                            const keep = app.tracks.filter((tr) => !trackSel.has(tr.uri));
+                            app.setTracks(keep);
+                            setTrackSel(new Set());
+                          }
+                        }
+                      ]
+                    );
+                  }}
+                >
+                  <Ionicons name="trash-outline" size={14} color={theme.colors.danger} />
+                  <Text style={styles.ghostBtnText}>{t("music.deleteSelected")} ({trackSel.size})</Text>
+                </Pressable>
+              )}
+            </View>
+          )}
           <View style={{ marginTop: 8 }}>
-            {app.tracks.map((tr, i) => (
-              <View key={i} style={styles.trackRow}>
-                <Pressable onPress={() => app.play(tr)} style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8 }}>
-                  <Ionicons name={app.currentTrack?.uri === tr.uri ? "musical-notes" : "musical-note"} size={16} color={theme.colors.accent} />
-                  <Text style={styles.trackName} numberOfLines={1}>{tr.title}</Text>
-                </Pressable>
-                <Pressable hitSlop={10} onPress={() => app.removeTrack(tr.uri)}>
-                  <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
-                </Pressable>
-              </View>
-            ))}
-            {app.tracks.length === 0 && <Text style={styles.body}>Выберите файлы через кнопку выше.</Text>}
+            {app.tracks.map((tr, i) => {
+              const sel = trackSel.has(tr.uri);
+              return (
+                <View key={i} style={[styles.trackRow, sel && { borderColor: theme.colors.accentGlow }]}>
+                  <Pressable
+                    onPress={() =>
+                      setTrackSel((prev) => {
+                        const next = new Set(prev);
+                        next.has(tr.uri) ? next.delete(tr.uri) : next.add(tr.uri);
+                        return next;
+                      })
+                    }
+                    hitSlop={8}
+                    style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 1, borderColor: sel ? theme.colors.accentGlow : theme.colors.border, alignItems: "center", justifyContent: "center", backgroundColor: sel ? theme.colors.accentGlow : "transparent", marginRight: 8 }}
+                  >
+                    {sel && <Ionicons name="checkmark" size={14} color="#0b1f14" />}
+                  </Pressable>
+                  <Pressable onPress={() => app.play(tr)} style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Ionicons name={app.currentTrack?.uri === tr.uri ? "musical-notes" : "musical-note"} size={16} color={theme.colors.accent} />
+                    <Text style={styles.trackName} numberOfLines={1}>{tr.title}</Text>
+                  </Pressable>
+                  <Pressable hitSlop={10} onPress={() => app.removeTrack(tr.uri)}>
+                    <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
+                  </Pressable>
+                </View>
+              );
+            })}
+            {app.tracks.length === 0 && <Text style={styles.body}>{t("music.pickHint")}</Text>}
           </View>
         </GlassCard>
 
@@ -181,7 +258,14 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: theme.colors.accent },
   chipText: { color: theme.colors.accent, fontSize: theme.font.size.xs },
   chipTextActive: { color: "#0b1f14", fontWeight: "700" },
-  trackRow: { flexDirection: "row", alignItems: "center", paddingVertical: 8, gap: 8 },
+  trackRow: { flexDirection: "row", alignItems: "center", paddingVertical: 8, gap: 8, borderWidth: 1, borderColor: "transparent", borderRadius: 10, paddingHorizontal: 6 },
+  ghostBtn: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: theme.radii.pill,
+    backgroundColor: "rgba(34, 197, 94, 0.08)",
+    borderWidth: 1, borderColor: theme.colors.border,
+  },
+  ghostBtnText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: "600" },
   trackName: { color: theme.colors.textPrimary, fontSize: theme.font.size.sm, flex: 1 },
   station: { flexDirection: "row", alignItems: "center", paddingVertical: 10, gap: 8, borderTopWidth: 1, borderTopColor: theme.colors.border }
 });

@@ -13,15 +13,15 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { Hint } from "@/components/Hint";
 import { theme } from "@/theme/theme";
 import { useApp, MediaItem } from "@/contexts/AppContext";
-import { fetchGooglePhotosAlbum } from "@/services/googlePhotos";
+import { fetchGooglePhotosAlbum, GPhoto } from "@/services/googlePhotos";
 
 export default function HomeScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const app = useApp();
-  const [gpPhotos, setGpPhotos] = useState<string[]>([]);
+  const [gpPhotos, setGpPhotos] = useState<GPhoto[]>([]);
   const [gpLoading, setGpLoading] = useState(false);
-  const [gpSelected, setGpSelected] = useState<Set<string>>(new Set());
+  const [gpSelected, setGpSelected] = useState<Set<string>>(new Set()); // holds FULL URLs
   const [libSelected, setLibSelected] = useState<Set<string>>(new Set());
   const [gpFullscreen, setGpFullscreen] = useState(false);
   const [albumList, setAlbumList] = useState<MediaLibrary.Album[] | null>(null);
@@ -143,14 +143,25 @@ export default function HomeScreen() {
       await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
     } catch {}
     const downloaded: MediaItem[] = [];
-    for (const url of Array.from(gpSelected)) {
-      const filename = url.split("/").pop()?.split("=")[0] ?? `${Date.now()}.jpg`;
-      const dest = dir + filename + ".jpg";
-      try {
-        const r = await FileSystem.downloadAsync(url, dest);
-        downloaded.push({ uri: r.uri, type: "image" });
-      } catch {}
-    }
+    // Parallelise downloads — previously this ran sequentially which made
+    // importing 30+ items take minutes. 6 concurrent requests stays well
+    // under Google's per-client rate limits.
+    const selected = Array.from(gpSelected);
+    const CONCURRENCY = 6;
+    let cursor = 0;
+    const workers = new Array(CONCURRENCY).fill(0).map(async () => {
+      while (cursor < selected.length) {
+        const idx = cursor++;
+        const url = selected[idx];
+        const filename = (url.split("/").pop()?.split("=")[0] ?? `${Date.now()}_${idx}.jpg`) + ".jpg";
+        const dest = dir + filename;
+        try {
+          const r = await FileSystem.downloadAsync(url, dest);
+          downloaded.push({ uri: r.uri, type: "image" });
+        } catch {}
+      }
+    });
+    await Promise.all(workers);
     if (downloaded.length) {
       app.addMedia(downloaded);
       setGpSelected(new Set());
@@ -241,16 +252,52 @@ export default function HomeScreen() {
           {app.mediaLibrary.length > 0 && (
             <>
               <View style={[styles.rowBetween, { marginTop: 12 }]}>
-                <Text style={styles.subHeader}>Ваши файлы ({app.mediaLibrary.length})</Text>
+                <Text style={styles.subHeader}>{t("home.library")} ({app.mediaLibrary.length})</Text>
                 <View style={{ flexDirection: "row", gap: 8 }}>
                   {libSelected.size > 0 && (
                     <Pressable onPress={deleteSelectedLib} style={styles.smallDanger}>
                       <Ionicons name="trash-outline" size={14} color="#fff" />
-                      <Text style={styles.smallDangerText}>Удалить ({libSelected.size})</Text>
+                      <Text style={styles.smallDangerText}>{t("home.deleteSelected")} ({libSelected.size})</Text>
                     </Pressable>
                   )}
                 </View>
               </View>
+              <View style={[styles.row, { marginTop: 6, gap: 6 }]}>
+                <Pressable
+                  style={styles.ghostBtn}
+                  onPress={() => setLibSelected(new Set(app.mediaLibrary.map((m) => m.uri)))}
+                >
+                  <Ionicons name="checkmark-done" size={14} color={theme.colors.accentGlow} />
+                  <Text style={styles.ghostBtnText}>{t("home.selectAll")}</Text>
+                </Pressable>
+                {libSelected.size > 0 && (
+                  <Pressable style={styles.ghostBtn} onPress={() => setLibSelected(new Set())}>
+                    <Ionicons name="close-circle-outline" size={14} color={theme.colors.textSecondary} />
+                    <Text style={styles.ghostBtnText}>{t("home.deselectAll")}</Text>
+                  </Pressable>
+                )}
+                <Pressable
+                  style={[styles.ghostBtn, { backgroundColor: "rgba(34, 197, 94, 0.18)" }]}
+                  onPress={() => {
+                    // "Use all for wallpaper" — enables auto-change with the
+                    // current selection (or full library if none explicitly
+                    // selected) and applies it.
+                    if (libSelected.size) {
+                      // Narrow library to just the selection so the auto-change
+                      // engine only cycles through the chosen files.
+                      const keep = new Set(libSelected);
+                      app.setMedia(app.mediaLibrary.filter((m) => keep.has(m.uri)));
+                    }
+                    app.setAutoChangeEnabled(true);
+                    app.applyLiveWallpaper("both");
+                    setLibSelected(new Set());
+                  }}
+                >
+                  <Ionicons name="apps-outline" size={14} color={theme.colors.accentGlow} />
+                  <Text style={styles.ghostBtnText}>{t("home.openAllForWallpaper")}</Text>
+                </Pressable>
+              </View>
+              <Text style={[styles.body, { marginTop: 4 }]}>{t("home.openAllHint")}</Text>
               {/* removeClippedSubviews + lazy thumbnails keeps this list
                   smooth even with 100+ entries. */}
               <ScrollView horizontal showsHorizontalScrollIndicator={false} removeClippedSubviews contentContainerStyle={{ paddingVertical: 8 }}>
@@ -384,28 +431,47 @@ export default function HomeScreen() {
               <View>
                 <Text style={styles.h2}>Google Photos</Text>
                 <Text style={styles.subDim}>
-                  {gpPhotos.length} фото{gpSelected.size ? ` • выбрано ${gpSelected.size}` : ""}
+                  {gpPhotos.length} фото{gpSelected.size ? ` • ${gpSelected.size} ${t("home.multiselect")}` : ""}
                 </Text>
               </View>
               <Pressable onPress={() => setGpFullscreen(false)} hitSlop={12}>
                 <Ionicons name="close" size={26} color={theme.colors.textPrimary} />
               </Pressable>
             </View>
+            <View style={[styles.row, { marginBottom: 8, gap: 6 }]}>
+              <Pressable
+                style={styles.ghostBtn}
+                onPress={() => setGpSelected(new Set(gpPhotos.map((p) => p.full)))}
+              >
+                <Ionicons name="checkmark-done" size={14} color={theme.colors.accentGlow} />
+                <Text style={styles.ghostBtnText}>{t("home.selectAll")}</Text>
+              </Pressable>
+              <Pressable
+                style={styles.ghostBtn}
+                onPress={() => setGpSelected(new Set())}
+              >
+                <Ionicons name="close-circle-outline" size={14} color={theme.colors.textSecondary} />
+                <Text style={styles.ghostBtnText}>{t("home.deselectAll")}</Text>
+              </Pressable>
+            </View>
             <FlatList
               data={gpPhotos}
-              keyExtractor={(u) => u}
               numColumns={3}
               initialNumToRender={12}
               windowSize={5}
               removeClippedSubviews
               columnWrapperStyle={{ gap: 6 }}
               contentContainerStyle={{ gap: 6, paddingBottom: 120 }}
+              keyExtractor={(p) => p.full}
               renderItem={({ item }) => {
-                const sel = gpSelected.has(item);
+                const sel = gpSelected.has(item.full);
                 const tileW = (Dimensions.get("window").width - 24 - 12) / 3;
                 return (
-                  <Pressable onPress={() => toggleGpSel(item)} style={{ width: tileW, height: tileW, borderRadius: 14, overflow: "hidden", backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: sel ? theme.colors.accent : theme.colors.border }}>
-                    <Image source={{ uri: item }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+                  <Pressable onPress={() => toggleGpSel(item.full)} style={{ width: tileW, height: tileW, borderRadius: 14, overflow: "hidden", backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: sel ? theme.colors.accentGlow : theme.colors.border }}>
+                    {/* Show the fast 400×400 thumbnail — NOT the 2048×2048
+                        original. Downloading the full image only happens at
+                        import time. */}
+                    <Image source={{ uri: item.thumb }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
                     <View style={[styles.checkDot, sel && styles.checkDotOn]}>
                       {sel && <Ionicons name="checkmark" size={14} color="#0b1f14" />}
                     </View>
@@ -538,4 +604,12 @@ const styles = StyleSheet.create({
   },
   albumTitle: { color: theme.colors.textPrimary, fontSize: 15, fontWeight: "600" },
   albumCount: { color: theme.colors.textSecondary, fontSize: 12, marginTop: 2 },
+  ghostBtn: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: theme.radii.pill,
+    backgroundColor: "rgba(34, 197, 94, 0.08)",
+    borderWidth: 1, borderColor: theme.colors.border,
+  },
+  ghostBtnText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: "600" },
+  body: { color: theme.colors.textSecondary, fontSize: theme.font.size.xs, marginTop: 4 },
 });
