@@ -168,7 +168,7 @@ export default function SettingsScreen() {
           </Pressable>
         </GlassCard>
 
-        <Text style={styles.footer}>Relax Sound Live Wallpapers v2.5</Text>
+        <Text style={styles.footer}>Relax Sound Live Wallpapers v2.6</Text>
       </ScrollView>
 
       {/* Accessibility rationale modal — Google Play requires apps to
@@ -216,7 +216,7 @@ export default function SettingsScreen() {
             </View>
             <ScrollView style={{ flex: 1, marginTop: 14 }}>
               <Text style={styles.aboutBig}>Relax Sound Live Wallpapers</Text>
-              <Text style={styles.body}>Version 2.5 • Nature Engine</Text>
+              <Text style={styles.body}>Version 2.6 • Nature Engine</Text>
               <View style={{ height: 14 }} />
               <Text style={styles.modalBody}>{t("settings.aboutBody")}</Text>
               <View style={{ height: 14 }} />
