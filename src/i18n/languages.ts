@@ -74,7 +74,19 @@ export const en: Dict = {
       gpDownloadFailed: "Could not download.",
       deleteFromLibTitle: "Delete",
       deleteFromLibMany: "Delete the selected files ({{count}}) from the library?",
-      deleteFromLibOne: "Delete this file from the library?"
+      deleteFromLibOne: "Delete this file from the library?",
+      photosLabel: "photos",
+      gpSelectedSuffix: "selected",
+      gpHide: "Hide",
+      gpOpen: "Open ({{count}})",
+      gpImportBtn: "Import",
+      gpImportBtnN: "Import ({{count}})",
+      gpImportBtnFull: "Import ({{count}})",
+      gpPickPhotos: "Pick photos",
+      gpLoading: "Loading...",
+      gpEmptyAlbum: "Album is empty or unreachable.",
+      pickAlbum: "Pick an album",
+      pickAlbumHint: "All photos and videos from the chosen album will be added to the library."
     },
     music: {
       title: "Audio Hub",
@@ -220,7 +232,19 @@ export const ru: Dict = {
       gpDownloadFailed: "Не удалось скачать.",
       deleteFromLibTitle: "Удалить",
       deleteFromLibMany: "Удалить выбранные файлы ({{count}}) из библиотеки?",
-      deleteFromLibOne: "Удалить файл из библиотеки?"
+      deleteFromLibOne: "Удалить файл из библиотеки?",
+      photosLabel: "фото",
+      gpSelectedSuffix: "выбрано",
+      gpHide: "Скрыть",
+      gpOpen: "Открыть ({{count}})",
+      gpImportBtn: "Импорт",
+      gpImportBtnN: "Импорт ({{count}})",
+      gpImportBtnFull: "Импортировать ({{count}})",
+      gpPickPhotos: "Выберите фото",
+      gpLoading: "Загружается...",
+      gpEmptyAlbum: "Альбом пуст или недоступен.",
+      pickAlbum: "Выберите альбом",
+      pickAlbumHint: "Все фото и видео из выбранного альбома будут добавлены в библиотеку."
     },
     music: {
       title: "Аудио", subtitle: "Саундскейпы и радио",

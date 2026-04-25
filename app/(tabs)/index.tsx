@@ -279,15 +279,11 @@ export default function HomeScreen() {
                 <Pressable
                   style={[styles.ghostBtn, { backgroundColor: "rgba(34, 197, 94, 0.18)" }]}
                   onPress={() => {
-                    // "Use all for wallpaper" — enables auto-change with the
-                    // current selection (or full library if none explicitly
-                    // selected) and applies it.
-                    if (libSelected.size) {
-                      // Narrow library to just the selection so the auto-change
-                      // engine only cycles through the chosen files.
-                      const keep = new Set(libSelected);
-                      app.setMedia(app.mediaLibrary.filter((m) => keep.has(m.uri)));
-                    }
+                    // "Use all for wallpaper" — enables auto-change over the
+                    // entire library and applies the live wallpaper. We do
+                    // NOT mutate the library here: the selection is for
+                    // deletion only, and silently dropping unselected media
+                    // would be data-loss with no undo.
                     app.setAutoChangeEnabled(true);
                     app.applyLiveWallpaper("both");
                     setLibSelected(new Set());
@@ -339,20 +335,20 @@ export default function HomeScreen() {
           <View style={styles.rowBetween}>
             <Text style={styles.sectionTitle}>{t("home.googlePhotos")}</Text>
             <Text style={styles.subDim}>
-              {gpLoading ? "…" : `${gpPhotos.length} фото${gpSelected.size ? ` • выбрано ${gpSelected.size}` : ""}`}
+              {gpLoading ? "…" : `${gpPhotos.length} ${t("home.photosLabel")}${gpSelected.size ? ` • ${t("home.gpSelectedSuffix")} ${gpSelected.size}` : ""}`}
             </Text>
           </View>
           <Text style={styles.sectionBody}>{t("home.googlePhotosHint")}</Text>
           <View style={[styles.row, { marginTop: 10, gap: 8 }]}>
             <PrimaryButton
-              label={gpFullscreen ? "Скрыть" : `Открыть (${gpPhotos.length || "…"})`}
+              label={gpFullscreen ? t("home.gpHide") : t("home.gpOpen", { count: gpPhotos.length })}
               icon="images-outline"
               variant="secondary"
               onPress={() => setGpFullscreen(true)}
               style={{ flex: 1 }}
             />
             <PrimaryButton
-              label={gpSelected.size > 0 ? `Импорт (${gpSelected.size})` : "Импорт"}
+              label={gpSelected.size > 0 ? t("home.gpImportBtnN", { count: gpSelected.size }) : t("home.gpImportBtn")}
               icon="cloud-download-outline"
               variant={gpSelected.size > 0 ? "primary" : "secondary"}
               onPress={importSelectedGP}
@@ -431,7 +427,7 @@ export default function HomeScreen() {
               <View>
                 <Text style={styles.h2}>Google Photos</Text>
                 <Text style={styles.subDim}>
-                  {gpPhotos.length} фото{gpSelected.size ? ` • ${gpSelected.size} ${t("home.multiselect")}` : ""}
+                  {gpPhotos.length} {t("home.photosLabel")}{gpSelected.size ? ` • ${gpSelected.size} ${t("home.multiselect")}` : ""}
                 </Text>
               </View>
               <Pressable onPress={() => setGpFullscreen(false)} hitSlop={12}>
@@ -480,13 +476,13 @@ export default function HomeScreen() {
               }}
               ListEmptyComponent={() => (
                 <Text style={[styles.emptyText, { textAlign: "center", marginTop: 40 }]}>
-                  {gpLoading ? "Загружается..." : "Альбом пуст или недоступен."}
+                  {gpLoading ? t("home.gpLoading") : t("home.gpEmptyAlbum")}
                 </Text>
               )}
             />
             <View style={{ position: "absolute", bottom: 24, left: 12, right: 12 }}>
               <PrimaryButton
-                label={gpSelected.size > 0 ? `Импортировать (${gpSelected.size})` : "Выберите фото"}
+                label={gpSelected.size > 0 ? t("home.gpImportBtnFull", { count: gpSelected.size }) : t("home.gpPickPhotos")}
                 icon="cloud-download-outline"
                 onPress={async () => { await importSelectedGP(); setGpFullscreen(false); }}
                 disabled={gpSelected.size === 0}
@@ -506,13 +502,13 @@ export default function HomeScreen() {
         <View style={styles.modalBg}>
           <View style={{ flex: 1, paddingTop: insets.top + 20, paddingHorizontal: 16, paddingBottom: 20 }}>
             <View style={styles.rowBetween}>
-              <Text style={styles.h2}>Выберите альбом</Text>
+              <Text style={styles.h2}>{t("home.pickAlbum")}</Text>
               <Pressable onPress={() => setAlbumList(null)} hitSlop={12}>
                 <Ionicons name="close" size={26} color={theme.colors.textPrimary} />
               </Pressable>
             </View>
             <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 4, marginBottom: 12 }}>
-              Все фото и видео из выбранного альбома будут добавлены в библиотеку.
+              {t("home.pickAlbumHint")}
             </Text>
             <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20 }}>
               {(albumList ?? []).map((a) => (
