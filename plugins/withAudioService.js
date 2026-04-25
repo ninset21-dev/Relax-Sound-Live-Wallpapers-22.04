@@ -225,29 +225,39 @@ class RelaxAudioService : Service() {
         audioManager?.let { am -> focusRequest?.let { am.abandonAudioFocusRequest(it) } }
     }
 
-    private fun ensurePlayer() {
-        if (player != null) return
+    /**
+     * Apply the standard audio attributes, persisted repeat mode, and
+     * isPlaying/error listeners to a freshly built ExoPlayer. Used by both
+     * ensurePlayer() and crossfadeTo() so a player promoted after a
+     * crossfade has the same focus/state behaviour as the original.
+     */
+    private fun configurePlayer(p: ExoPlayer) {
         val repeat = getSharedPreferences("relax_audio", MODE_PRIVATE)
             .getString("repeat_mode", "off") ?: "off"
-        player = ExoPlayer.Builder(this).build().apply {
-            setAudioAttributes(
-                M3AudioAttributes.Builder()
-                    .setUsage(androidx.media3.common.C.USAGE_MEDIA)
-                    .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MUSIC)
-                    .build(), false
-            )
-            repeatMode = when (repeat) {
-                "one" -> Player.REPEAT_MODE_ONE
-                "all" -> Player.REPEAT_MODE_ALL
-                else -> Player.REPEAT_MODE_OFF
-            }
-            addListener(object : Player.Listener {
-                override fun onIsPlayingChanged(isPlaying: Boolean) { broadcastState() }
-                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                    Log.e(TAG, "player error", error); pauseInternal()
-                }
-            })
+        p.setAudioAttributes(
+            M3AudioAttributes.Builder()
+                .setUsage(androidx.media3.common.C.USAGE_MEDIA)
+                .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MUSIC)
+                .build(), false
+        )
+        p.repeatMode = when (repeat) {
+            "one" -> Player.REPEAT_MODE_ONE
+            "all" -> Player.REPEAT_MODE_ALL
+            else -> Player.REPEAT_MODE_OFF
         }
+        p.addListener(object : Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) { broadcastState() }
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                Log.e(TAG, "player error", error); pauseInternal()
+            }
+        })
+    }
+
+    private fun ensurePlayer() {
+        if (player != null) return
+        val p = ExoPlayer.Builder(this).build()
+        configurePlayer(p)
+        player = p
     }
 
     private fun play(url: String, gapless: Boolean = false) {
@@ -304,6 +314,7 @@ class RelaxAudioService : Service() {
         swapPlayer?.let { try { it.release() } catch (_: Throwable) {} }
 
         val sp = ExoPlayer.Builder(this).build()
+        configurePlayer(sp)
         sp.volume = 0f
         sp.setMediaItem(MediaItem.fromUri(Uri.parse(url)))
         sp.prepare()
