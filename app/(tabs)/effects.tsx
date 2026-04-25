@@ -98,7 +98,7 @@ export default function EffectsScreen() {
             const isSelected = app.effect === e.key;
             return (
               <Pressable key={e.key} onPress={() => app.setEffect(e.key)} style={[styles.layerCellCompact, isSelected && styles.layerCellActive]}>
-                <Ionicons name={e.icon} size={20} color={isSelected ? "#0b1f14" : theme.colors.accent} />
+                <Ionicons name={e.icon} size={20} color={isSelected ? theme.colors.textPrimary : theme.colors.accent} />
                 <Text style={[styles.layerLabelCompact, isSelected && styles.layerLabelActive]} numberOfLines={1}>{t(e.i18nKey)}</Text>
               </Pressable>
             );

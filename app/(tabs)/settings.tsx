@@ -221,7 +221,7 @@ export default function SettingsScreen() {
               <Text style={styles.modalBody}>{t("settings.aboutBody")}</Text>
               <View style={{ height: 14 }} />
               <Text style={[styles.modalBody, { fontStyle: "italic", color: theme.colors.accent }]}>
-                © Aliaksandr Kananovich (ninset8). Все изображения являются авторской собственностью автора.
+                {t("settings.aboutCopyright")}
               </Text>
               <View style={{ height: 20 }} />
               <Pressable style={styles.linkRow} onPress={() => Linking.openURL("https://www.instagram.com/konon_photographer?igsh=MXJwdGduNXV2aGIzcg==")}>
