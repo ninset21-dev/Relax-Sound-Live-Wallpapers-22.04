@@ -264,9 +264,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         Wallpaper.updateWallpaperParams({ videoAudio: on }).catch(() => {});
       },
       toggleRepeat: () => {
-        // Native service owns the authoritative repeat state and will
-        // broadcast it back. Call without updating local state — the next
-        // state broadcast will sync it.
+        // Cycle locally so the next AsyncStorage persist captures it (so
+        // the UI shows the right icon even on a cold start before the
+        // service has had a chance to broadcast). Native service owns the
+        // authoritative state and will broadcast back if it disagrees.
+        const next: RepeatMode =
+          state.repeatMode === "off" ? "all" : state.repeatMode === "all" ? "one" : "off";
+        persist({ repeatMode: next });
         Audio.toggleRepeat?.().catch(() => {});
       },
       setLanguage: (l) => {
