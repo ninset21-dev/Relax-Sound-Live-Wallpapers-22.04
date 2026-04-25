@@ -80,31 +80,33 @@ export async function popularByGenre(tag: string, quality: "auto" | "low" | "med
 
 /**
  * Actively probe station URLs for reachability. HEAD requests are often
- * blocked by stream servers, so we do a short GET with a signal-abort after
- * a tight timeout — a successful response (or any 2xx/3xx redirect) means
- * the stream is alive.
+ * blocked by stream servers, so we do a tightly bounded GET — using a
+ * Range: bytes=0-0 header so the server only returns one byte (or the
+ * response headers, if it ignores Range). We also limit concurrency so we
+ * never have more than 6 streams open at once, which keeps mobile-data
+ * usage well under ~50KB per genre switch.
  */
-export async function probeStations(stations: Station[], timeoutMs = 3500): Promise<Station[]> {
-  const probe = async (s: Station): Promise<boolean> => {
+export async function probeStations(stations: Station[], timeoutMs = 2500): Promise<Station[]> {
+  const probeOne = async (s: Station): Promise<boolean> => {
     const url = s.url_resolved || s.url;
     if (!url) return false;
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
-      const r = await fetch(url, { method: "GET", signal: ctrl.signal });
-      if (!(r.ok || r.status === 302 || r.status === 301)) return false;
-      // Stricter check: require an audio/* content-type. Many "working"
-      // stations actually serve an HTML error page or a playlist (.m3u/.pls)
-      // that ExoPlayer can't open reliably, so we filter those out here.
+      const r = await fetch(url, {
+        method: "GET",
+        signal: ctrl.signal,
+        // Many shoutcast servers honour Range and stop sending after a single
+        // byte; the rest fall back to streaming, which we abort below.
+        headers: { Range: "bytes=0-0" },
+      });
+      if (!(r.ok || r.status === 206 || r.status === 302 || r.status === 301)) return false;
       const ct = (r.headers.get("content-type") || "").toLowerCase();
       if (
         ct.includes("audio/") ||
         ct.includes("application/ogg") ||
         ct.includes("application/octet-stream")
       ) return true;
-      // Some servers don't return Content-Type on the stream endpoint;
-      // fall back to accepting the response if URL ends with a known audio
-      // extension.
       const low = url.toLowerCase().split("?")[0];
       if (/\.(mp3|aac|ogg|m4a|flac|wav|opus|webm)$/.test(low)) return true;
       return false;
@@ -117,7 +119,17 @@ export async function probeStations(stations: Station[], timeoutMs = 3500): Prom
       clearTimeout(timer);
     }
   };
-  const results = await Promise.all(stations.map(probe));
+  // Bounded concurrency pool — at most CONCURRENCY in-flight at a time.
+  const CONCURRENCY = 6;
+  const results = new Array<boolean>(stations.length).fill(false);
+  let cursor = 0;
+  const workers = new Array(Math.min(CONCURRENCY, stations.length)).fill(0).map(async () => {
+    while (cursor < stations.length) {
+      const idx = cursor++;
+      results[idx] = await probeOne(stations[idx]);
+    }
+  });
+  await Promise.all(workers);
   return stations.filter((_, i) => results[i]);
 }
 
