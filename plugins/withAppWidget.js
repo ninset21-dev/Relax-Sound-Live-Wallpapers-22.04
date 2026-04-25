@@ -125,7 +125,11 @@ open class RelaxWidgetBase(private val size: String) : AppWidgetProvider() {
             val widgetPrefs = ctx.getSharedPreferences("relax_widget", Context.MODE_PRIVATE)
             val title = audioPrefs.getString("title", "Relax Sound") ?: "Relax Sound"
             val mode = widgetPrefs.getString("mode", "video") ?: "video"
-            val isPlaying = audioPrefs.getBoolean("was_playing", false)
+            // Reflect the real player state (is_playing, populated by the
+            // service's broadcastState/persistPrefs) so the widget icon
+            // doesn't flash Pause during a focus loss when was_playing is
+            // still true.
+            val isPlaying = audioPrefs.getBoolean("is_playing", audioPrefs.getBoolean("was_playing", false))
 
             try { views.setTextViewText(R.id::class.java.getField("title").getInt(null), title) } catch (_: Throwable) {}
             try { views.setTextViewText(R.id::class.java.getField("mode_label").getInt(null), mode.uppercase()) } catch (_: Throwable) {}
@@ -319,12 +323,29 @@ const widgetInfo = (variant) => {
 `;
 };
 
+// Translucent glassmorphic background — matches the in-app GlassCard look
+// (req #2: widgets must visually align with the app theme, more
+// transparent). The layer-list creates a soft outer glow around a
+// semi-transparent forest body so the user's home wallpaper bleeds through.
 const WIDGET_BG = `<?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-  <solid android:color="#D00b1f14"/>
-  <corners android:radius="24dp"/>
-  <stroke android:width="1dp" android:color="#6611E3A1"/>
-</shape>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+  <item>
+    <shape android:shape="rectangle">
+      <solid android:color="#3322c55e"/>
+      <corners android:radius="26dp"/>
+    </shape>
+  </item>
+  <item android:left="2dp" android:top="2dp" android:right="2dp" android:bottom="2dp">
+    <shape android:shape="rectangle">
+      <gradient
+        android:startColor="#990b1f14"
+        android:endColor="#660b1f14"
+        android:angle="270"/>
+      <corners android:radius="24dp"/>
+      <stroke android:width="1dp" android:color="#5522c55e"/>
+    </shape>
+  </item>
+</layer-list>
 `;
 
 const withAppWidgetManifest = (config) =>

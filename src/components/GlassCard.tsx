@@ -9,15 +9,17 @@ import { useApp } from "@/contexts/AppContext";
 export const GlassCard: React.FC<{ children: React.ReactNode; style?: ViewStyle; padding?: number }> = ({
   children, style, padding = 16
 }) => {
-  // uiOpacity controls the visual transparency of the card as a whole so
-  // the slider has an obvious effect. Below 0.05 the card disappears
-  // entirely (req #3 — slider must visibly affect the UI from 0 to 100%).
-  let cardOpacity = 1;
-  try { cardOpacity = useApp().uiOpacity; } catch {}
+  // Card surface alpha tracks uiOpacity but only between 0.25 and 1 — fully
+  // transparent cards would be unusable (text floating on the bare home
+  // screen), so we cap the lower bound. The wallpaper-fade behaviour the
+  // user asked about lives in BackgroundGradient, not here.
+  let alpha = 1;
+  try { alpha = useApp().uiOpacity; } catch {}
+  const surfaceAlpha = 0.25 + alpha * 0.75;
   return (
-    <View style={[styles.wrap, style, { opacity: cardOpacity }]}>
-      <BlurView intensity={Math.max(10, 40 * cardOpacity)} tint="dark" style={StyleSheet.absoluteFill} />
-      <View style={styles.bg} />
+    <View style={[styles.wrap, style]}>
+      <BlurView intensity={Math.max(10, 40 * surfaceAlpha)} tint="dark" style={StyleSheet.absoluteFill} />
+      <View style={[styles.bg, { opacity: surfaceAlpha }]} />
       <View style={[styles.inner, { padding }]}>{children}</View>
     </View>
   );

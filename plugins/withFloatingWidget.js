@@ -314,20 +314,35 @@ const OVERLAY_LAYOUT = `<?xml version="1.0" encoding="utf-8"?>
 </FrameLayout>
 `;
 
+// Floating expanded panel — translucent forest gradient with a glassmorphic
+// accent ring (req #2 + req #8: matches in-app GlassCard look).
 const BUBBLE_BG = `<?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-  <solid android:color="#E60b1f14"/>
-  <corners android:radius="28dp"/>
-  <stroke android:width="1dp" android:color="#88 11E3A1" />
-</shape>
-`.replace("#88 11", "#8811");
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+  <item>
+    <shape android:shape="rectangle">
+      <solid android:color="#3322c55e"/>
+      <corners android:radius="30dp"/>
+    </shape>
+  </item>
+  <item android:left="2dp" android:top="2dp" android:right="2dp" android:bottom="2dp">
+    <shape android:shape="rectangle">
+      <gradient
+        android:startColor="#B30b1f14"
+        android:endColor="#800b1f14"
+        android:angle="270"/>
+      <corners android:radius="28dp"/>
+      <stroke android:width="1dp" android:color="#5522c55e"/>
+    </shape>
+  </item>
+</layer-list>
+`;
 
 // Collapsed bubble: a small translucent green dot with soft ring.
 // User asked for transparent / no picture.
 const BUBBLE_DOT = `<?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
-  <solid android:color="#4411E3A1"/>
-  <stroke android:width="1dp" android:color="#9911E3A1"/>
+  <solid android:color="#3322c55e"/>
+  <stroke android:width="1dp" android:color="#9922c55e"/>
 </shape>
 `;
 

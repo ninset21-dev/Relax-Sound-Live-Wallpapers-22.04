@@ -60,8 +60,7 @@
             "minSdkVersion": 24,
             "buildToolsVersion": "35.0.0",
             "enableProguardInReleaseBuilds": true,
-            "enableShrinkResourcesInReleaseBuilds": true,
-            "extraProguardRules": "-keep class com.relaxsound.livewallpapers.** { *; }"
+            "extraProguardRules": "-keep class com.relaxsound.livewallpapers.** { *; }\n-keep class com.facebook.react.** { *; }\n-keep class com.facebook.hermes.** { *; }\n-keep class com.swmansion.reanimated.** { *; }\n-keep class com.swmansion.rnscreens.** { *; }\n-keep class com.swmansion.gesturehandler.** { *; }\n-keepclassmembers class * { @com.facebook.react.uimanager.annotations.ReactProp <methods>; }\n-keepclassmembers class * { @com.facebook.react.bridge.ReactMethod <methods>; }"
           }
         }
       ],
@@ -70,7 +69,8 @@
       "./plugins/withFloatingWidget.js",
       "./plugins/withAccessibilityService.js",
       "./plugins/withAudioService.js",
-      "./plugins/withWallpaperModule.js"
+      "./plugins/withWallpaperModule.js",
+      "./plugins/withTransparentActivity.js"
     ],
     "experiments": {
       "typedRoutes": true
