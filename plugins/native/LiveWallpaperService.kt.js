@@ -103,10 +103,35 @@ class RelaxWallpaperService : WallpaperService() {
             } catch (t: Throwable) { Log.e(TAG, "autoswap", t) }
         }
 
+        // Keep the last applied video volume so we only call setVolume() when
+        // it actually changes — setVolume inside a running MediaPlayer hot
+        // path would otherwise be called 30-60x per second.
+        private var lastAppliedVideoVolume: Float = -1f
+        private var cachedVideoUri: String? = null
+
         private val frameTick = object : Runnable {
             override fun run() {
                 if (!visible) return
                 maybeAutoSwap()
+                // Keep wallpaper video volume in sync with the global volume
+                // pref (written by widget/UI). Only re-apply on change.
+                val curVol = prefs.getFloat("wallpaper_video_volume", 0.7f)
+                if (mediaPlayer != null && curVol != lastAppliedVideoVolume) {
+                    applyVideoVolume()
+                    lastAppliedVideoVolume = curVol
+                }
+                // Detect widget-triggered video change: wallpaper_video_uri
+                // may have been updated by the widget (cycle wallpaper) or
+                // auto-swap. Rebuild the MediaPlayer so the new clip actually
+                // plays instead of the old one looping forever.
+                val newVideoUri = prefs.getString("wallpaper_video_uri", null)
+                if (newVideoUri != cachedVideoUri) {
+                    cachedVideoUri = newVideoUri
+                    try { mediaPlayer?.stop(); mediaPlayer?.release() } catch (_: Throwable) {}
+                    mediaPlayer = null
+                    lastAppliedVideoVolume = -1f
+                    if (!newVideoUri.isNullOrBlank()) setupMedia(surfaceHolder)
+                }
                 // React to wallpaper swap (auto-change / widget shuffle): if the
                 // stored imageUri changed, decode the new bitmap OFF the frame
                 // thread. We keep drawing the old cachedBg while the new one
@@ -224,10 +249,15 @@ class RelaxWallpaperService : WallpaperService() {
             if (!videoUri.isNullOrBlank()) {
                 try {
                     val audioEnabled = prefs.getBoolean("wallpaper_video_audio", false)
+                    // Track user's global volume so widget volume affects the
+                    // video audio too (req: "volume sync across all widgets").
+                    val vol = if (audioEnabled)
+                        prefs.getFloat("wallpaper_video_volume", 0.7f).coerceIn(0f, 1f)
+                    else 0f
                     mediaPlayer = MediaPlayer().apply {
                         setDataSource(this@RelaxWallpaperService, Uri.parse(videoUri))
                         isLooping = true
-                        setVolume(if (audioEnabled) 1f else 0f, if (audioEnabled) 1f else 0f)
+                        setVolume(vol, vol)
                         setSurface(holder.surface)
                         prepare()
                         start()
@@ -239,6 +269,19 @@ class RelaxWallpaperService : WallpaperService() {
             } else {
                 drawImage(holder, imageUri)
             }
+        }
+
+        /**
+         * Called when the user changes volume from any widget/UI. We re-apply it
+         * to the wallpaper video MediaPlayer so all volume sliders are synced.
+         */
+        fun applyVideoVolume() {
+            val mp = mediaPlayer ?: return
+            val audioEnabled = prefs.getBoolean("wallpaper_video_audio", false)
+            val vol = if (audioEnabled)
+                prefs.getFloat("wallpaper_video_volume", 0.7f).coerceIn(0f, 1f)
+            else 0f
+            try { mp.setVolume(vol, vol) } catch (_: Throwable) {}
         }
 
         /**

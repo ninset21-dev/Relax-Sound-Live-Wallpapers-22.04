@@ -42,7 +42,7 @@ open class RelaxWidgetBase(private val size: String) : AppWidgetProvider() {
      */
     private fun cycleEffect(ctx: Context) {
         val wp = ctx.getSharedPreferences("relax_wallpaper_prefs", Context.MODE_PRIVATE)
-        val order = listOf("none", "snow", "rain", "bubbles", "leaves", "flowers", "particles", "fireflies", "fog", "frost", "stars", "aurora")
+        val order = listOf("none", "snow", "rain", "bubbles", "leaves", "flowers", "particles", "fireflies", "fog", "frost", "stars", "aurora", "meteor", "cherryblossom", "plasma")
         val cur = wp.getString("effect_type", "none") ?: "none"
         val next = order[(order.indexOf(cur).coerceAtLeast(0) + 1) % order.size]
         wp.edit().putString("effect_type", next).apply()
@@ -53,9 +53,11 @@ open class RelaxWidgetBase(private val size: String) : AppWidgetProvider() {
     }
 
     /**
-     * Pick a random image from the user's saved library (persisted by JS as a
-     * JSON array under key "wallpaper_library_json") and install it as the
-     * current live-wallpaper backdrop. Keeps working when the RN app is dead.
+     * Pick a random item (image OR video) from the user's saved library
+     * (persisted by JS as a JSON array under key "wallpaper_library_json")
+     * and install it as the current live-wallpaper backdrop. Keeps working
+     * when the RN app is dead. Writes the correct key and clears the opposite
+     * one so the wallpaper engine picks the right media source.
      */
     private fun shuffleWallpaper(ctx: Context) {
         val widgetPrefs = ctx.getSharedPreferences("relax_widget", Context.MODE_PRIVATE)
@@ -63,11 +65,16 @@ open class RelaxWidgetBase(private val size: String) : AppWidgetProvider() {
         try {
             val arr = org.json.JSONArray(raw)
             if (arr.length() == 0) return
-            val uri = arr.getJSONObject((Math.random() * arr.length()).toInt()).optString("uri", "")
+            val idx = (Math.random() * arr.length()).toInt().coerceIn(0, arr.length() - 1)
+            val obj = arr.getJSONObject(idx)
+            val uri = obj.optString("uri", "")
+            val type = obj.optString("type", "image")
             if (uri.isBlank()) return
-            ctx.getSharedPreferences("relax_wallpaper_prefs", Context.MODE_PRIVATE)
-                .edit().putString("wallpaper_image_uri", uri).apply()
-            ctx.sendBroadcast(Intent("${PKG}.WALLPAPER_CHANGED").setPackage(ctx.packageName).putExtra("uri", uri))
+            val wp = ctx.getSharedPreferences("relax_wallpaper_prefs", Context.MODE_PRIVATE)
+            val key = if (type == "video") "wallpaper_video_uri" else "wallpaper_image_uri"
+            val clearKey = if (type == "video") "wallpaper_image_uri" else "wallpaper_video_uri"
+            wp.edit().putString(key, uri).remove(clearKey).apply()
+            ctx.sendBroadcast(Intent("${PKG}.WALLPAPER_CHANGED").setPackage(ctx.packageName).putExtra("uri", uri).putExtra("type", type))
         } catch (_: Throwable) {}
     }
 

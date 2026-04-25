@@ -1,9 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { ScrollView, Text, StyleSheet, View, Pressable, Image, Alert, Modal } from "react-native";
+import { ScrollView, Text, StyleSheet, View, Pressable, Image, Alert, Modal, FlatList, Dimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Slider from "@react-native-community/slider";
 import { useTranslation } from "react-i18next";
-import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import * as MediaLibrary from "expo-media-library";
 import * as FileSystem from "expo-file-system";
@@ -15,7 +14,6 @@ import { Hint } from "@/components/Hint";
 import { theme } from "@/theme/theme";
 import { useApp, MediaItem } from "@/contexts/AppContext";
 import { fetchGooglePhotosAlbum } from "@/services/googlePhotos";
-import { EffectPreview } from "@/components/EffectPreview";
 
 export default function HomeScreen() {
   const { t } = useTranslation();
@@ -25,7 +23,7 @@ export default function HomeScreen() {
   const [gpLoading, setGpLoading] = useState(false);
   const [gpSelected, setGpSelected] = useState<Set<string>>(new Set());
   const [libSelected, setLibSelected] = useState<Set<string>>(new Set());
-  const [previewOpen, setPreviewOpen] = useState(false);
+  const [gpFullscreen, setGpFullscreen] = useState(false);
   const [albumList, setAlbumList] = useState<MediaLibrary.Album[] | null>(null);
   const [albumLoading, setAlbumLoading] = useState(false);
 
@@ -66,13 +64,38 @@ export default function HomeScreen() {
   }, [app]);
 
   /**
-   * Android does not let 3rd-party apps enumerate arbitrary folder trees via
-   * the legacy `expo-document-picker`. The correct approach is
-   * `expo-media-library`, which lists actual Gallery albums (directories)
-   * and lets us enumerate *all* assets inside a chosen album. This fixes the
-   * "pick whole folder" flow that was silently doing nothing before.
+   * Android: first try the real Storage Access Framework picker
+   * (FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync)
+   * which opens the native DocumentsUI — the same UI the user expects from
+   * Android's file manager. We then enumerate files inside the chosen tree
+   * and import all images/videos.
+   *
+   * Fallback to expo-media-library albums list (useful on devices where
+   * SAF isn't available / permission denied), rendered in a full Modal so
+   * there's no 3-button Alert.alert cap.
    */
   const pickFolder = useCallback(async () => {
+    try {
+      const saf = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+      if (saf.granted) {
+        const entries = await FileSystem.StorageAccessFramework.readDirectoryAsync(saf.directoryUri);
+        const items: MediaItem[] = entries
+          .map((uri) => {
+            const low = uri.toLowerCase();
+            if (low.match(/\.(jpe?g|png|webp|heic|bmp|gif)(\?|$)/)) return { uri, type: "image" as const };
+            if (low.match(/\.(mp4|webm|mov|mkv)(\?|$)/)) return { uri, type: "video" as const };
+            return null;
+          })
+          .filter(Boolean) as MediaItem[];
+        if (items.length) {
+          app.addMedia(items);
+          Alert.alert("Добавлено", `${items.length} файлов добавлены в библиотеку.`);
+          return;
+        }
+      }
+    } catch {}
+
+    // Fallback: MediaLibrary albums (no SAF, or user cancelled)
     const perm = await MediaLibrary.requestPermissionsAsync();
     if (!perm.granted) {
       Alert.alert("Нужен доступ", "Разрешите приложению доступ к медиа-библиотеке.");
@@ -85,13 +108,11 @@ export default function HomeScreen() {
         Alert.alert("Папки не найдены", "Нет доступных альбомов в медиа-библиотеке.");
         return;
       }
-      // Open a modal with the full list — Alert.alert on Android only shows
-      // 3 buttons, so we can't use it for a potentially long album list.
       setAlbumList(albums);
     } finally {
       setAlbumLoading(false);
     }
-  }, []);
+  }, [app]);
 
   const importAlbum = useCallback(async (album: MediaLibrary.Album) => {
     setAlbumList(null);
@@ -230,8 +251,10 @@ export default function HomeScreen() {
                   )}
                 </View>
               </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 8 }}>
-                {app.mediaLibrary.map((m, i) => {
+              {/* removeClippedSubviews + lazy thumbnails keeps this list
+                  smooth even with 100+ entries. */}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} removeClippedSubviews contentContainerStyle={{ paddingVertical: 8 }}>
+                {app.mediaLibrary.slice(0, 60).map((m, i) => {
                   const sel = libSelected.has(m.uri);
                   return (
                     <Pressable key={i} style={styles.thumbLarge} onLongPress={() => toggleLibSel(m.uri)} onPress={() => toggleLibSel(m.uri)}>
@@ -273,68 +296,23 @@ export default function HomeScreen() {
             </Text>
           </View>
           <Text style={styles.sectionBody}>{t("home.googlePhotosHint")}</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator
-            contentContainerStyle={{ paddingVertical: 10, gap: 10 }}
-            style={{ height: 180 }}
-          >
-            {gpLoading && <Text style={styles.emptyText}>Загружается...</Text>}
-            {!gpLoading &&
-              gpPhotos.map((u) => {
-                const sel = gpSelected.has(u);
-                return (
-                  <Pressable key={u} style={styles.gpTile} onPress={() => toggleGpSel(u)}>
-                    <Image source={{ uri: u }} style={StyleSheet.absoluteFillObject} />
-                    <View style={[styles.checkDot, sel && styles.checkDotOn]}>
-                      {sel && <Ionicons name="checkmark" size={16} color="#0b1f14" />}
-                    </View>
-                  </Pressable>
-                );
-              })}
-            {!gpLoading && gpPhotos.length === 0 && <Text style={styles.emptyText}>Альбом пуст или недоступен.</Text>}
-          </ScrollView>
           <View style={[styles.row, { marginTop: 10, gap: 8 }]}>
             <PrimaryButton
-              label={gpSelected.size > 0 ? `Импортировать (${gpSelected.size})` : "Выберите фото выше"}
+              label={gpFullscreen ? "Скрыть" : `Открыть (${gpPhotos.length || "…"})`}
+              icon="images-outline"
+              variant="secondary"
+              onPress={() => setGpFullscreen(true)}
+              style={{ flex: 1 }}
+            />
+            <PrimaryButton
+              label={gpSelected.size > 0 ? `Импорт (${gpSelected.size})` : "Импорт"}
               icon="cloud-download-outline"
               variant={gpSelected.size > 0 ? "primary" : "secondary"}
               onPress={importSelectedGP}
               style={{ flex: 1 }}
+              disabled={gpSelected.size === 0}
             />
           </View>
-        </GlassCard>
-
-        <GlassCard>
-          <View style={styles.rowBetween}>
-            <Text style={styles.sectionTitle}>Эффекты</Text>
-            <Pressable onPress={() => setPreviewOpen(true)}>
-              <Text style={styles.linkText}>Предпросмотр →</Text>
-            </Pressable>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 8, gap: 6 }}>
-            {(
-              ["none", "snow", "rain", "bubbles", "leaves", "flowers", "particles", "fireflies", "fog", "frost", "stars", "aurora"] as const
-            ).map((e) => {
-              const isSelected = app.effect === e;
-              return (
-                <Pressable key={e} onPress={() => app.setEffect(e)} style={[styles.chip, isSelected && styles.chipActive]}>
-                  <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>{e === "none" ? "—" : e}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-          <Text style={styles.label}>Интенсивность: {Math.round(app.intensity * 100)}%</Text>
-          <Slider
-            minimumValue={0}
-            maximumValue={1}
-            value={app.intensity}
-            step={0.01}
-            minimumTrackTintColor={theme.colors.accent}
-            maximumTrackTintColor={theme.colors.border}
-            thumbTintColor={theme.colors.accent}
-            onValueChange={app.setIntensity}
-          />
         </GlassCard>
 
         <GlassCard>
@@ -397,20 +375,59 @@ export default function HomeScreen() {
         </GlassCard>
       </ScrollView>
 
-      <Modal visible={previewOpen} animationType="slide" onRequestClose={() => setPreviewOpen(false)} transparent>
-        <View style={styles.modalBg}>
-          <View style={{ flex: 1, paddingTop: insets.top + 20, paddingHorizontal: 16 }}>
-            <View style={styles.rowBetween}>
-              <Text style={styles.h2}>Предпросмотр: {app.effect}</Text>
-              <Pressable onPress={() => setPreviewOpen(false)} hitSlop={12}>
+      {/* Fullscreen Google Photos viewer with lazy-loaded grid (FlatList
+          virtualization keeps scroll fluid across hundreds of tiles). */}
+      <Modal visible={gpFullscreen} animationType="slide" onRequestClose={() => setGpFullscreen(false)} transparent={false}>
+        <BackgroundGradient>
+          <View style={{ flex: 1, paddingTop: insets.top + 10, paddingHorizontal: 12 }}>
+            <View style={[styles.rowBetween, { marginBottom: 10 }]}>
+              <View>
+                <Text style={styles.h2}>Google Photos</Text>
+                <Text style={styles.subDim}>
+                  {gpPhotos.length} фото{gpSelected.size ? ` • выбрано ${gpSelected.size}` : ""}
+                </Text>
+              </View>
+              <Pressable onPress={() => setGpFullscreen(false)} hitSlop={12}>
                 <Ionicons name="close" size={26} color={theme.colors.textPrimary} />
               </Pressable>
             </View>
-            <View style={{ flex: 1, marginTop: 12, borderRadius: 22, overflow: "hidden" }}>
-              <EffectPreview effect={app.effect} intensity={app.intensity} speed={app.speed} />
+            <FlatList
+              data={gpPhotos}
+              keyExtractor={(u) => u}
+              numColumns={3}
+              initialNumToRender={12}
+              windowSize={5}
+              removeClippedSubviews
+              columnWrapperStyle={{ gap: 6 }}
+              contentContainerStyle={{ gap: 6, paddingBottom: 120 }}
+              renderItem={({ item }) => {
+                const sel = gpSelected.has(item);
+                const tileW = (Dimensions.get("window").width - 24 - 12) / 3;
+                return (
+                  <Pressable onPress={() => toggleGpSel(item)} style={{ width: tileW, height: tileW, borderRadius: 14, overflow: "hidden", backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: sel ? theme.colors.accent : theme.colors.border }}>
+                    <Image source={{ uri: item }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+                    <View style={[styles.checkDot, sel && styles.checkDotOn]}>
+                      {sel && <Ionicons name="checkmark" size={14} color="#0b1f14" />}
+                    </View>
+                  </Pressable>
+                );
+              }}
+              ListEmptyComponent={() => (
+                <Text style={[styles.emptyText, { textAlign: "center", marginTop: 40 }]}>
+                  {gpLoading ? "Загружается..." : "Альбом пуст или недоступен."}
+                </Text>
+              )}
+            />
+            <View style={{ position: "absolute", bottom: 24, left: 12, right: 12 }}>
+              <PrimaryButton
+                label={gpSelected.size > 0 ? `Импортировать (${gpSelected.size})` : "Выберите фото"}
+                icon="cloud-download-outline"
+                onPress={async () => { await importSelectedGP(); setGpFullscreen(false); }}
+                disabled={gpSelected.size === 0}
+              />
             </View>
           </View>
-        </View>
+        </BackgroundGradient>
       </Modal>
 
       {/* Album picker modal — replaces the old Alert.alert with 3-button cap */}

@@ -7,6 +7,7 @@ export type Track = { uri: string; title: string };
 export type PerfMode = "balanced" | "high" | "eco";
 export type StartupSource = "radio" | "local";
 export type Quality = "auto" | "low" | "med" | "high";
+export type RepeatMode = "off" | "all" | "one";
 export type EffectKind =
   | "none"
   | "snow"
@@ -19,7 +20,10 @@ export type EffectKind =
   | "fog"
   | "frost"
   | "stars"
-  | "aurora";
+  | "aurora"
+  | "meteor"
+  | "cherryblossom"
+  | "plasma";
 
 interface AppState_ {
   mediaLibrary: MediaItem[];
@@ -42,6 +46,8 @@ interface AppState_ {
   overlayEnabled: boolean;
   a11yEnabled: boolean;
   liveWallpaperActive: boolean;
+  repeatMode: RepeatMode;
+  uiOpacity: number;
 }
 type Ctx = AppState_ & {
   addMedia(items: MediaItem[]): void;
@@ -62,6 +68,9 @@ type Ctx = AppState_ & {
   setAutoChangeEnabled(b: boolean): void;
   setAutoChangeSec(n: number): void;
   setVideoAudio(on: boolean): void;
+  toggleRepeat(): void;
+  setLanguage(l: "system" | "ru" | "en"): void;
+  setUiOpacity(v: number): void;
   play(t: Track): Promise<void>;
   togglePlay(): Promise<void>;
   nextTrack(): Promise<void>;
@@ -89,7 +98,9 @@ const Default: AppState_ = {
   language: "system",
   overlayEnabled: false,
   a11yEnabled: false,
-  liveWallpaperActive: false
+  liveWallpaperActive: false,
+  repeatMode: "off",
+  uiOpacity: 1
 };
 
 const AppCtx = createContext<Ctx | null>(null);
@@ -117,7 +128,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     const sub = onAudioState((s) =>
-      setState((p) => ({ ...p, isPlaying: s.isPlaying, volume: s.volume, currentTrack: p.currentTrack ? { ...p.currentTrack, title: s.title || p.currentTrack.title } : p.currentTrack }))
+      setState((p) => ({
+        ...p,
+        isPlaying: s.isPlaying,
+        volume: s.volume,
+        repeatMode: (s.repeatMode as RepeatMode) ?? p.repeatMode,
+        currentTrack: p.currentTrack ? { ...p.currentTrack, title: s.title || p.currentTrack.title } : p.currentTrack
+      }))
     );
     return () => sub.remove();
   }, []);
@@ -227,6 +244,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         persist({ videoAudio: on });
         Wallpaper.updateWallpaperParams({ videoAudio: on }).catch(() => {});
       },
+      toggleRepeat: () => {
+        // Native service owns the authoritative repeat state and will
+        // broadcast it back. Call without updating local state — the next
+        // state broadcast will sync it.
+        Audio.toggleRepeat?.().catch(() => {});
+      },
+      setLanguage: (l) => persist({ language: l }),
+      setUiOpacity: (v) => persist({ uiOpacity: Math.max(0.3, Math.min(1, v)) }),
       play: async (t) => {
         persist({ currentTrack: t });
         try {

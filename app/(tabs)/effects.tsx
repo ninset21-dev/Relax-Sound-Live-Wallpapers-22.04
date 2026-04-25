@@ -1,5 +1,5 @@
-import React from "react";
-import { ScrollView, View, Text, StyleSheet, Pressable } from "react-native";
+import React, { useState } from "react";
+import { ScrollView, View, Text, StyleSheet, Pressable, Modal, Dimensions } from "react-native";
 import Slider from "@react-native-community/slider";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
@@ -25,12 +25,17 @@ const EFFECTS: { key: EffectKind; icon: React.ComponentProps<typeof Ionicons>["n
   { key: "frost", icon: "snow-outline", title: "Иней" },
   { key: "stars", icon: "star-outline", title: "Звёзды" },
   { key: "aurora", icon: "color-wand-outline", title: "Сияние" },
+  { key: "meteor", icon: "flash-outline", title: "Метеоры" },
+  { key: "cherryblossom", icon: "flower-outline", title: "Сакура" },
+  { key: "plasma", icon: "color-filter-outline", title: "Плазма" },
 ];
 
 export default function EffectsScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const app = useApp();
+  const [fullscreen, setFullscreen] = useState(false);
+  const { width: winW, height: winH } = Dimensions.get("window");
 
   return (
     <BackgroundGradient>
@@ -45,15 +50,17 @@ export default function EffectsScreen() {
           </View>
         </View>
 
-        <GlassCard padding={0}>
-          <View style={{ height: 220 }}>
-            <EffectPreview effect={app.effect} intensity={app.intensity} speed={app.speed} height={220} />
-            <View style={styles.previewTag}>
-              <Ionicons name="eye-outline" size={14} color={theme.colors.textPrimary} />
-              <Text style={styles.previewTagText}>Live Preview</Text>
+        <Pressable onPress={() => setFullscreen(true)}>
+          <GlassCard padding={0}>
+            <View style={{ height: 280 }}>
+              <EffectPreview effect={app.effect} intensity={app.intensity} speed={app.speed} height={280} />
+              <View style={styles.previewTag}>
+                <Ionicons name="expand-outline" size={14} color={theme.colors.textPrimary} />
+                <Text style={styles.previewTagText}>Открыть на весь экран</Text>
+              </View>
             </View>
-          </View>
-        </GlassCard>
+          </GlassCard>
+        </Pressable>
 
         <GlassCard>
           <Text style={styles.cardHead}>Engine Performance</Text>
@@ -138,6 +145,34 @@ export default function EffectsScreen() {
 
         <Hint text="Эффекты синхронизированы: в приложении, на главном экране и на экране блокировки отображается одно и то же." />
       </ScrollView>
+
+      <Modal visible={fullscreen} animationType="fade" onRequestClose={() => setFullscreen(false)} transparent={false}>
+        <View style={{ flex: 1, backgroundColor: "#000" }}>
+          <EffectPreview
+            effect={app.effect}
+            intensity={app.intensity}
+            speed={app.speed}
+            width={winW}
+            height={winH}
+          />
+          <Pressable
+            onPress={() => setFullscreen(false)}
+            style={{ position: "absolute", top: insets.top + 14, right: 16, width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(0,0,0,0.55)", alignItems: "center", justifyContent: "center" }}
+            hitSlop={10}
+          >
+            <Ionicons name="close" size={22} color="#fff" />
+          </Pressable>
+          <View style={{ position: "absolute", bottom: insets.bottom + 20, left: 16, right: 16, backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 18, padding: 14 }}>
+            <Text style={{ color: "#fff", fontSize: 13, marginBottom: 6 }}>
+              {app.effect === "none" ? "Эффект отключён" : `Эффект: ${app.effect}`}
+            </Text>
+            <Slider minimumValue={0} maximumValue={1} value={app.intensity} step={0.01}
+              minimumTrackTintColor={theme.colors.accent} maximumTrackTintColor="rgba(255,255,255,0.25)"
+              thumbTintColor={theme.colors.accent}
+              onValueChange={(v) => app.setIntensity(v)} />
+          </View>
+        </View>
+      </Modal>
     </BackgroundGradient>
   );
 }

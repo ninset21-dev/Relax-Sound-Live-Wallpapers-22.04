@@ -255,23 +255,28 @@ class RelaxFloatingModule(ctx: ReactApplicationContext) : ReactContextBaseJavaMo
 const OVERLAY_LAYOUT = `<?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="wrap_content" android:layout_height="wrap_content">
-    <ImageView android:id="@+id/overlay_bubble"
-        android:layout_width="56dp" android:layout_height="56dp"
-        android:background="@drawable/bubble_background"
-        android:padding="10dp"
-        android:src="@android:drawable/ic_menu_compass"
-        android:tint="#E8FFEF"
+    <!-- Collapsed: a minimal semi-transparent dot, no picture. Tap to expand. -->
+    <View android:id="@+id/overlay_bubble"
+        android:layout_width="28dp" android:layout_height="28dp"
+        android:background="@drawable/bubble_dot"
         android:visibility="gone"/>
     <LinearLayout android:id="@+id/overlay_expanded"
-        android:layout_width="72dp" android:layout_height="wrap_content"
+        android:layout_width="78dp" android:layout_height="wrap_content"
         android:orientation="vertical" android:padding="8dp"
         android:gravity="center_horizontal"
         android:background="@drawable/bubble_background">
+        <!-- Close button FIRST (top). User request: "кнопка удаления виджета
+             должна находиться сверху". -->
+        <ImageButton android:id="@+id/btn_close"
+            android:layout_width="28dp" android:layout_height="28dp"
+            android:background="@android:color/transparent"
+            android:src="@android:drawable/ic_menu_close_clear_cancel" android:tint="#FFB4B4"/>
         <TextView android:id="@+id/overlay_title"
             android:layout_width="match_parent" android:layout_height="wrap_content"
             android:text="Relax"
             android:gravity="center"
             android:maxLines="2"
+            android:layout_marginTop="4dp"
             android:ellipsize="end"
             android:textColor="#E8FFEF" android:textSize="10sp"/>
         <ImageButton android:id="@+id/btn_prev_track"
@@ -281,12 +286,12 @@ const OVERLAY_LAYOUT = `<?xml version="1.0" encoding="utf-8"?>
             android:src="@android:drawable/ic_media_previous" android:tint="#9EE2B8"/>
         <ImageButton android:id="@+id/btn_toggle_play"
             android:layout_width="44dp" android:layout_height="44dp"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="2dp"
             android:background="@android:color/transparent"
             android:src="@android:drawable/ic_media_play" android:tint="#E8FFEF"/>
         <ImageButton android:id="@+id/btn_next_track"
             android:layout_width="40dp" android:layout_height="40dp"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="2dp"
             android:background="@android:color/transparent"
             android:src="@android:drawable/ic_media_next" android:tint="#9EE2B8"/>
         <FrameLayout android:id="@+id/volume_slider"
@@ -299,18 +304,12 @@ const OVERLAY_LAYOUT = `<?xml version="1.0" encoding="utf-8"?>
                 android:rotation="270"
                 android:max="100" android:progress="70"/>
         </FrameLayout>
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        <!-- Collapse (minimize) at the bottom — keeps the dangerous "close" up top. -->
+        <ImageButton android:id="@+id/btn_collapse"
+            android:layout_width="28dp" android:layout_height="28dp"
             android:layout_marginTop="6dp"
-            android:orientation="horizontal" android:gravity="center">
-            <ImageButton android:id="@+id/btn_collapse"
-                android:layout_width="28dp" android:layout_height="28dp"
-                android:background="@android:color/transparent"
-                android:src="@android:drawable/arrow_down_float" android:tint="#9EE2B8"/>
-            <ImageButton android:id="@+id/btn_close"
-                android:layout_width="28dp" android:layout_height="28dp"
-                android:background="@android:color/transparent"
-                android:src="@android:drawable/ic_menu_close_clear_cancel" android:tint="#9EE2B8"/>
-        </LinearLayout>
+            android:background="@android:color/transparent"
+            android:src="@android:drawable/arrow_down_float" android:tint="#9EE2B8"/>
     </LinearLayout>
 </FrameLayout>
 `;
@@ -322,6 +321,15 @@ const BUBBLE_BG = `<?xml version="1.0" encoding="utf-8"?>
   <stroke android:width="1dp" android:color="#88 11E3A1" />
 </shape>
 `.replace("#88 11", "#8811");
+
+// Collapsed bubble: a small translucent green dot with soft ring.
+// User asked for transparent / no picture.
+const BUBBLE_DOT = `<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+  <solid android:color="#4411E3A1"/>
+  <stroke android:width="1dp" android:color="#9911E3A1"/>
+</shape>
+`;
 
 const withFloatingManifest = (config) =>
   withAndroidManifest(config, (config) => {
@@ -356,6 +364,7 @@ const withFloatingFiles = (config) =>
       writeNativeSource(root, "native/RelaxFloatingModule.kt", MODULE_KT);
       writeResource(root, "layout/relax_floating_overlay.xml", OVERLAY_LAYOUT);
       writeResource(root, "drawable/bubble_background.xml", BUBBLE_BG);
+      writeResource(root, "drawable/bubble_dot.xml", BUBBLE_DOT);
       return config;
     }
   ]);

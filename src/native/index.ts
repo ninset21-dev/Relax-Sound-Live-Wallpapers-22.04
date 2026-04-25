@@ -18,7 +18,10 @@ export interface WallpaperParams {
     | "fog"
     | "frost"
     | "stars"
-    | "aurora";
+    | "aurora"
+    | "meteor"
+    | "cherryblossom"
+    | "plasma";
   intensity?: number; // 0..1
   speed?: number; // 0.2..3
   fps?: number; // 10..60
@@ -39,6 +42,8 @@ interface AudioModuleI {
   setPlaylist(items: { uri: string; title: string }[], index: number): Promiselike<boolean>;
   duck(): Promiselike<boolean>;
   unduck(): Promiselike<boolean>;
+  toggleRepeat?(): Promiselike<boolean>;
+  setRepeatMode?(mode: "off" | "all" | "one"): Promiselike<boolean>;
 }
 interface WidgetModuleI {
   updateWidgetState(title: string, volume: number, mode: string): Promiselike<boolean>;
@@ -80,7 +85,7 @@ export const Accessibility: AccessibilityModuleI = isAndroid
   ? (NativeModules.RelaxAccessibilityModule as AccessibilityModuleI) ?? stub
   : stub;
 
-export const onAudioState = (cb: (s: { title: string; isPlaying: boolean; volume: number }) => void) =>
+export const onAudioState = (cb: (s: { title: string; isPlaying: boolean; volume: number; repeatMode?: string }) => void) =>
   DeviceEventEmitter.addListener("RelaxAudioState", cb);
 
 export const onAudioRequest = (cb: (r: { direction: "next" | "prev" }) => void) =>

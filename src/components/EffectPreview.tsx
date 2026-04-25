@@ -112,6 +112,21 @@ function spawn(effect: EffectKind, w: number, h: number): Particle {
       return common({ x: rnd() * w, y: rnd() * h, size: 1.5 + rnd() * 3, life: 20, maxLife: 20 });
     case "aurora":
       return common({ x: rnd() * w, y: rnd() * h * 0.6, vx: (rnd() - 0.5) * 0.4, size: 60 + rnd() * 120, life: 16, maxLife: 16 });
+    case "meteor": {
+      const fromLeft = rnd() > 0.5;
+      return common({
+        x: fromLeft ? -10 : w + 10,
+        y: rnd() * h * 0.5,
+        vx: fromLeft ? 18 + rnd() * 10 : -(18 + rnd() * 10),
+        vy: 22 + rnd() * 10,
+        size: 2 + rnd() * 2,
+        life: 3, maxLife: 3
+      });
+    }
+    case "cherryblossom":
+      return common({ y: -20, vx: (rnd() - 0.5) * 2.2, vy: 1.4 + rnd() * 1.3, size: 8 + rnd() * 6, life: 14, maxLife: 14 });
+    case "plasma":
+      return common({ x: rnd() * w, y: rnd() * h, vx: (rnd() - 0.5) * 2, vy: (rnd() - 0.5) * 2, size: 20 + rnd() * 30, life: 10, maxLife: 10 });
     default:
       return common({ vx: (rnd() - 0.5) * 2, vy: 2 + rnd() * 3, size: 3 + rnd() * 5, life: 6, maxLife: 6 });
   }
@@ -149,6 +164,19 @@ function renderParticle(effect: EffectKind, p: Particle, i: number) {
     }
     case "aurora":
       return <Circle key={i} cx={p.x} cy={p.y} r={p.size} fill={`rgba(${140 + Math.round(Math.sin(p.phase) * 60)},${200 + Math.round(Math.cos(p.phase) * 40)},${180 + Math.round(Math.sin(p.phase * 1.3) * 60)},0.18)`} />;
+    case "meteor":
+      return (
+        <G key={i}>
+          <Line x1={p.x} y1={p.y} x2={p.x - p.vx * 0.5} y2={p.y - p.vy * 0.5} stroke={`rgba(255,200,120,${a})`} strokeWidth={p.size + 1} />
+          <Circle cx={p.x} cy={p.y} r={p.size + 1} fill={`rgba(255,255,220,${a})`} />
+        </G>
+      );
+    case "cherryblossom":
+      return <Circle key={i} cx={p.x} cy={p.y} r={p.size * 0.7} fill={`rgba(255,${190 + Math.round(Math.sin(p.phase) * 15)},215,${a})`} />;
+    case "plasma": {
+      const hue = Math.round(((p.phase * 40) % 360 + 360) % 360);
+      return <Circle key={i} cx={p.x} cy={p.y} r={p.size} fill={`hsla(${hue}, 75%, 60%, 0.35)`} />;
+    }
     default:
       return <Circle key={i} cx={p.x} cy={p.y} r={p.size} fill={`rgba(160,240,200,${a})`} />;
   }

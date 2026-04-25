@@ -1,7 +1,9 @@
-import React from "react";
-import { ScrollView, View, Text, StyleSheet, Pressable, Linking } from "react-native";
+import React, { useState } from "react";
+import { ScrollView, View, Text, StyleSheet, Pressable, Linking, Modal, Alert } from "react-native";
+import Slider from "@react-native-community/slider";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
+import i18n from "i18next";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BackgroundGradient } from "@/components/BackgroundGradient";
 import { GlassCard } from "@/components/GlassCard";
@@ -9,6 +11,9 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { theme } from "@/theme/theme";
 import { useApp } from "@/contexts/AppContext";
 import { Accessibility, Floating } from "@/native";
+
+const PRIVACY_URL =
+  "https://sites.google.com/view/relax-sound-live-wallpapers/%D0%B3%D0%BB%D0%B0%D0%B2%D0%BD%D0%B0%D1%8F-%D1%81%D1%82%D1%80%D0%B0%D0%BD%D0%B8%D1%86%D0%B0";
 
 const InstructionBlock: React.FC<{ title: string; body: string }> = ({ title, body }) => {
   const [open, setOpen] = React.useState(false);
@@ -27,11 +32,37 @@ export default function SettingsScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const app = useApp();
+  const [a11yRationale, setA11yRationale] = useState(false);
+  const [termsOpen, setTermsOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+
+  const pickLanguage = async (l: "system" | "ru" | "en") => {
+    app.setLanguage(l);
+    try { await i18n.changeLanguage(l === "system" ? undefined : l); } catch {}
+  };
+
+  const openA11yFlow = async () => {
+    setA11yRationale(false);
+    try {
+      await Accessibility.openAccessibilitySettings();
+    } catch {}
+    setTimeout(() => app.refreshA11y(), 800);
+  };
 
   return (
     <BackgroundGradient>
-      <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 8, paddingBottom: 110 }]}>
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 8, paddingBottom: 130 }]}>
         <Text style={styles.h1}>{t("settings.title")}</Text>
+
+        <GlassCard>
+          <Text style={styles.sectionTitle}>{t("settings.language")}</Text>
+          <Text style={styles.body}>{t("settings.languageHint")}</Text>
+          <View style={[styles.row, { marginTop: 8, gap: 6 }]}>
+            <PrimaryButton label="Система" variant={app.language === "system" ? "primary" : "secondary"} onPress={() => pickLanguage("system")} style={{ flex: 1 }} />
+            <PrimaryButton label="Русский" variant={app.language === "ru" ? "primary" : "secondary"} onPress={() => pickLanguage("ru")} style={{ flex: 1 }} />
+            <PrimaryButton label="English" variant={app.language === "en" ? "primary" : "secondary"} onPress={() => pickLanguage("en")} style={{ flex: 1 }} />
+          </View>
+        </GlassCard>
 
         <GlassCard>
           <Text style={styles.sectionTitle}>{t("settings.perfMode")}</Text>
@@ -46,11 +77,27 @@ export default function SettingsScreen() {
         </GlassCard>
 
         <GlassCard>
+          <Text style={styles.sectionTitle}>{t("settings.uiOpacity")}</Text>
+          <Text style={styles.body}>{t("settings.uiOpacityHint")}</Text>
+          <Text style={[styles.body, { marginTop: 6 }]}>{Math.round(app.uiOpacity * 100)}%</Text>
+          <Slider
+            minimumValue={0.3}
+            maximumValue={1}
+            value={app.uiOpacity}
+            step={0.01}
+            minimumTrackTintColor={theme.colors.accent}
+            maximumTrackTintColor={theme.colors.border}
+            thumbTintColor={theme.colors.accent}
+            onValueChange={(v) => app.setUiOpacity(v)}
+          />
+        </GlassCard>
+
+        <GlassCard>
           <Text style={styles.sectionTitle}>{t("settings.doubleTapLock")}</Text>
           <Text style={styles.body}>{t("settings.doubleTapHint")}</Text>
           <View style={[styles.row, { marginTop: 6 }]}>
             <PrimaryButton label={t("settings.openA11y")} icon="finger-print-outline"
-              onPress={async () => { await Accessibility.openAccessibilitySettings(); setTimeout(() => app.refreshA11y(), 500); }} />
+              onPress={() => setA11yRationale(true)} />
           </View>
           <Text style={[styles.body, { marginTop: 6 }]}>
             {app.a11yEnabled ? "Статус: разрешено" : "Статус: не разрешено"}
@@ -77,6 +124,25 @@ export default function SettingsScreen() {
         </GlassCard>
 
         <GlassCard>
+          <Text style={styles.sectionTitle}>{t("settings.legal")}</Text>
+          <Pressable style={styles.linkRow} onPress={() => setAboutOpen(true)}>
+            <Ionicons name="information-circle-outline" size={20} color={theme.colors.accent} />
+            <Text style={styles.link}>{t("settings.about")}</Text>
+            <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
+          </Pressable>
+          <Pressable style={styles.linkRow} onPress={() => Linking.openURL(PRIVACY_URL)}>
+            <Ionicons name="shield-checkmark-outline" size={20} color={theme.colors.accent} />
+            <Text style={styles.link}>{t("settings.privacy")}</Text>
+            <Ionicons name="open-outline" size={18} color={theme.colors.textSecondary} />
+          </Pressable>
+          <Pressable style={styles.linkRow} onPress={() => setTermsOpen(true)}>
+            <Ionicons name="document-text-outline" size={20} color={theme.colors.accent} />
+            <Text style={styles.link}>{t("settings.terms")}</Text>
+            <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
+          </Pressable>
+        </GlassCard>
+
+        <GlassCard>
           <Text style={styles.sectionTitle}>{t("settings.links")}</Text>
           <Pressable style={styles.linkRow} onPress={() => Linking.openURL("https://www.instagram.com/konon_photographer?igsh=MXJwdGduNXV2aGIzcg==")}>
             <Ionicons name="logo-instagram" size={20} color={theme.colors.accent} />
@@ -92,21 +158,98 @@ export default function SettingsScreen() {
           </Pressable>
         </GlassCard>
 
-        <Text style={styles.footer}>Relax Sound Live Wallpapers v1.0</Text>
+        <Text style={styles.footer}>Relax Sound Live Wallpapers v2.4</Text>
       </ScrollView>
+
+      {/* Accessibility rationale modal — Google Play requires apps to
+          explain why ACCESSIBILITY_SERVICE is needed before the user is
+          sent into Settings. */}
+      <Modal visible={a11yRationale} transparent animationType="fade" onRequestClose={() => setA11yRationale(false)}>
+        <View style={styles.modalBg}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalH}>{t("settings.a11yRationaleTitle")}</Text>
+            <Text style={styles.modalBody}>{t("settings.a11yRationaleBody")}</Text>
+            <View style={{ flexDirection: "row", gap: 8, marginTop: 14 }}>
+              <PrimaryButton label={t("common.cancel")} variant="secondary" onPress={() => setA11yRationale(false)} style={{ flex: 1 }} />
+              <PrimaryButton label={t("settings.continue")} onPress={openA11yFlow} style={{ flex: 1 }} />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Terms of use */}
+      <Modal visible={termsOpen} animationType="slide" onRequestClose={() => setTermsOpen(false)}>
+        <BackgroundGradient>
+          <View style={{ flex: 1, paddingTop: insets.top + 10, paddingHorizontal: 16 }}>
+            <View style={styles.rowBetween}>
+              <Text style={styles.h2}>{t("settings.terms")}</Text>
+              <Pressable onPress={() => setTermsOpen(false)} hitSlop={12}>
+                <Ionicons name="close" size={26} color={theme.colors.textPrimary} />
+              </Pressable>
+            </View>
+            <ScrollView style={{ flex: 1, marginTop: 14 }}>
+              <Text style={styles.modalBody}>{t("settings.termsBody")}</Text>
+            </ScrollView>
+          </View>
+        </BackgroundGradient>
+      </Modal>
+
+      {/* About */}
+      <Modal visible={aboutOpen} animationType="slide" onRequestClose={() => setAboutOpen(false)}>
+        <BackgroundGradient>
+          <View style={{ flex: 1, paddingTop: insets.top + 10, paddingHorizontal: 16 }}>
+            <View style={styles.rowBetween}>
+              <Text style={styles.h2}>{t("settings.about")}</Text>
+              <Pressable onPress={() => setAboutOpen(false)} hitSlop={12}>
+                <Ionicons name="close" size={26} color={theme.colors.textPrimary} />
+              </Pressable>
+            </View>
+            <ScrollView style={{ flex: 1, marginTop: 14 }}>
+              <Text style={styles.aboutBig}>Relax Sound Live Wallpapers</Text>
+              <Text style={styles.body}>Version 2.4 • Nature Engine</Text>
+              <View style={{ height: 14 }} />
+              <Text style={styles.modalBody}>{t("settings.aboutBody")}</Text>
+              <View style={{ height: 14 }} />
+              <Text style={[styles.modalBody, { fontStyle: "italic", color: theme.colors.accent }]}>
+                © Aliaksandr Kananovich (ninset8). Все изображения являются авторской собственностью автора.
+              </Text>
+              <View style={{ height: 20 }} />
+              <Pressable style={styles.linkRow} onPress={() => Linking.openURL("https://www.instagram.com/konon_photographer?igsh=MXJwdGduNXV2aGIzcg==")}>
+                <Ionicons name="logo-instagram" size={20} color={theme.colors.accent} />
+                <Text style={styles.link}>Instagram: konon_photographer</Text>
+              </Pressable>
+              <Pressable style={styles.linkRow} onPress={() => Linking.openURL("https://NINSET8.wixsite.com/rare")}>
+                <Ionicons name="globe-outline" size={20} color={theme.colors.accent} />
+                <Text style={styles.link}>Portfolio: NINSET8.wixsite.com/rare</Text>
+              </Pressable>
+              <Pressable style={styles.linkRow} onPress={() => Linking.openURL("mailto:ninset8@gmail.com")}>
+                <Ionicons name="mail-outline" size={20} color={theme.colors.accent} />
+                <Text style={styles.link}>ninset8@gmail.com</Text>
+              </Pressable>
+            </ScrollView>
+          </View>
+        </BackgroundGradient>
+      </Modal>
     </BackgroundGradient>
   );
 }
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 16 },
   h1: { color: theme.colors.textPrimary, fontSize: theme.font.size.xxl, fontWeight: "700", marginBottom: 8 },
+  h2: { color: theme.colors.textPrimary, fontSize: 22, fontWeight: "700" },
   sectionTitle: { color: theme.colors.textPrimary, fontSize: theme.font.size.lg, fontWeight: "600" },
   body: { color: theme.colors.textSecondary, fontSize: theme.font.size.xs, marginTop: 4 },
   row: { flexDirection: "row" },
+  rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   accRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 },
   accTitle: { color: theme.colors.textPrimary, fontSize: theme.font.size.sm, fontWeight: "600" },
   accBody: { color: theme.colors.textSecondary, fontSize: theme.font.size.xs, marginTop: 4, marginLeft: 26, lineHeight: 17 },
   linkRow: { flexDirection: "row", alignItems: "center", paddingVertical: 10, gap: 10 },
   link: { color: theme.colors.accent, fontSize: theme.font.size.sm, flex: 1 },
-  footer: { color: theme.colors.textMuted, fontSize: theme.font.size.xs, textAlign: "center", marginTop: 16 }
+  footer: { color: theme.colors.textMuted, fontSize: theme.font.size.xs, textAlign: "center", marginTop: 16 },
+  modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", alignItems: "center", justifyContent: "center", padding: 24 },
+  modalBox: { width: "100%", maxWidth: 480, backgroundColor: "#112a1d", borderRadius: 20, padding: 20, borderWidth: 1, borderColor: theme.colors.border },
+  modalH: { color: theme.colors.textPrimary, fontSize: 18, fontWeight: "700", marginBottom: 8 },
+  modalBody: { color: theme.colors.textSecondary, fontSize: 14, lineHeight: 21 },
+  aboutBig: { color: theme.colors.textPrimary, fontSize: 22, fontWeight: "700" }
 });

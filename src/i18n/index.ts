@@ -40,7 +40,8 @@ const ru = {
       nowPlaying: "Сейчас играет",
       noTrack: "Нет трека",
       play: "Играть", pause: "Пауза", next: "Следующий", prev: "Предыдущий",
-      volume: "Громкость приложения", fadeIn: "Плавное нарастание громкости"
+      volume: "Громкость приложения", fadeIn: "Плавное нарастание громкости",
+      repeatOff: "Повтор: выкл", repeatAll: "Повтор всего", repeatOne: "Повтор трека"
     },
     effects: {
       title: "Эффекты",
@@ -76,14 +77,27 @@ const ru = {
       links: "Контакты автора",
       instagram: "Подпишитесь для вдохновления (Instagram)",
       email: "Обратная связь",
-      website: "Сайт с профессиональными снимками"
+      website: "Сайт с профессиональными снимками",
+      languageHint: "Выберите язык интерфейса приложения.",
+      uiOpacity: "Прозрачность интерфейса и виджетов",
+      uiOpacityHint: "Управляет прозрачностью всех карточек в приложении и плавающего виджета.",
+      legal: "Юридическая информация",
+      about: "О приложении",
+      privacy: "Политика конфиденциальности",
+      terms: "Условия использования",
+      continue: "Продолжить",
+      a11yRationaleTitle: "Зачем нужно разрешение Accessibility?",
+      a11yRationaleBody: "Приложение использует службу Специальных возможностей исключительно для одной цели: перехватить двойное касание экрана и заблокировать смартфон. Никакие данные не считываются, не сохраняются и не передаются. Служба не читает содержимое других приложений, не собирает ввод и работает только пока пользователь явно включил функцию «Двойной тап — блокировка». Вы можете отключить разрешение в любой момент в настройках Android.",
+      aboutBody: "Relax Sound Live Wallpapers — это спокойные живые обои с природой, частицами и атмосферным радио/музыкой. Приложение создано с душой и вниманием к деталям. Все фотографии в приложении сняты автором Aliaksandr Kananovich (Instagram: konon_photographer, ninset8) и являются его авторской собственностью. Запрещено копирование и распространение изображений без явного разрешения автора.",
+      termsBody: "Используя приложение Relax Sound Live Wallpapers, вы соглашаетесь со следующим:\n\n1) Приложение предоставляется \"как есть\" без каких-либо гарантий. Автор не несёт ответственности за любой вред, связанный с использованием приложения.\n\n2) Все фотографии, видеоматериалы и визуальный контент, интегрированные в приложение, являются собственностью автора Aliaksandr Kananovich (ninset8). Копирование, распространение, коммерческое использование изображений без письменного разрешения автора запрещено.\n\n3) Приложение может использовать радиостанции сторонних провайдеров (Radio Browser API). Автор не несёт ответственности за содержание сторонних потоков.\n\n4) Приложение запрашивает разрешения: доступ к медиатеке (для установки обоев), доступ к наложению поверх других приложений (для плавающего виджета) и службу Accessibility (только для функции «двойной тап — блокировка»). Отключить любое разрешение можно в настройках Android.\n\n5) Приложение не собирает персональные данные и не передаёт их третьим лицам. Полная политика конфиденциальности доступна по ссылке в разделе настроек.\n\n6) Автор оставляет за собой право обновлять условия использования. Продолжая использовать приложение после обновления условий, вы принимаете новую редакцию."
     },
     common: {
       save: "Сохранить", cancel: "Отмена", yes: "Да", no: "Нет",
       chooseAll: "Добавить всё (выбрать несколько файлов)",
       on: "Вкл", off: "Выкл",
       seconds: "сек"
-    }
+    },
+    actions: {}
   }
 };
 
@@ -125,7 +139,8 @@ const en = {
       nowPlaying: "Now playing",
       noTrack: "No track",
       play: "Play", pause: "Pause", next: "Next", prev: "Previous",
-      volume: "App volume", fadeIn: "Volume fade-in"
+      volume: "App volume", fadeIn: "Volume fade-in",
+      repeatOff: "Repeat: off", repeatAll: "Repeat all", repeatOne: "Repeat one"
     },
     effects: {
       title: "Effects",
@@ -161,13 +176,26 @@ const en = {
       links: "Contact the author",
       instagram: "Follow for inspiration (Instagram)",
       email: "Feedback",
-      website: "Portfolio website"
+      website: "Portfolio website",
+      languageHint: "Choose the app interface language.",
+      uiOpacity: "Interface & widget opacity",
+      uiOpacityHint: "Controls the transparency of all cards in the app and the floating widget.",
+      legal: "Legal",
+      about: "About",
+      privacy: "Privacy policy",
+      terms: "Terms of use",
+      continue: "Continue",
+      a11yRationaleTitle: "Why is Accessibility permission needed?",
+      a11yRationaleBody: "The app uses the Accessibility service for one purpose only: to detect a double-tap gesture and lock the screen. It does not read, store or transmit any data. The service does not read other apps' content, does not capture input, and only runs while you have explicitly enabled the \"Double-tap to lock\" feature. You can disable the permission at any time in Android settings.",
+      aboutBody: "Relax Sound Live Wallpapers is a calm live wallpaper app with nature scenes, particle effects and ambient radio/music. All photos in the app are captured by the author Aliaksandr Kananovich (Instagram: konon_photographer, ninset8) and are his exclusive property. Redistribution or commercial reuse of the images without explicit permission is not allowed.",
+      termsBody: "By using Relax Sound Live Wallpapers you agree to the following:\n\n1) The app is provided \"as is\" without warranty. The author is not liable for damage caused by using the app.\n\n2) All photos, video and visual content integrated into the app are the property of the author Aliaksandr Kananovich (ninset8). Copying, distribution or commercial use without written permission is prohibited.\n\n3) The app may use third-party radio stations (Radio Browser API). The author is not responsible for third-party stream content.\n\n4) The app requests permissions: media library access (to set wallpapers), system overlay (for the floating widget) and Accessibility service (only for the \"double-tap to lock\" feature). You can revoke any permission in Android settings.\n\n5) The app does not collect personal data or share it with third parties. A full privacy policy is available via the link in the Settings section.\n\n6) The author may update these terms. Continuing to use the app after an update means you accept the new version."
     },
     common: {
       save: "Save", cancel: "Cancel", yes: "Yes", no: "No",
       chooseAll: "Add all (multi-select files)",
       on: "On", off: "Off", seconds: "sec"
-    }
+    },
+    actions: {}
   }
 };
 

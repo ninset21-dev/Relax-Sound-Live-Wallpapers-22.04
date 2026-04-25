@@ -11,7 +11,7 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { Hint } from "@/components/Hint";
 import { theme } from "@/theme/theme";
 import { useApp, Track } from "@/contexts/AppContext";
-import { GENRES, popularByGenre, Station } from "@/services/radio";
+import { GENRES, popularByGenre, probeStations, Station } from "@/services/radio";
 
 export default function MusicScreen() {
   const { t } = useTranslation();
@@ -33,7 +33,12 @@ export default function MusicScreen() {
     setLoading(true); setGenre(g);
     try {
       const s = await popularByGenre(g, q ?? app.quality);
+      // Show results immediately; probe in background and remove dead
+      // stations progressively so the list stays responsive.
       setStations(s);
+      const alive = await probeStations(s.slice(0, 30));
+      const aliveUrls = new Set(alive.map((a) => a.url_resolved || a.url));
+      setStations((prev) => prev.filter((p) => aliveUrls.has(p.url_resolved || p.url) || prev.indexOf(p) >= 30));
     } finally { setLoading(false); }
   }, [app.quality]);
 
@@ -58,6 +63,19 @@ export default function MusicScreen() {
             <PrimaryButton label={app.isPlaying ? t("music.pause") : t("music.play")}
               icon={app.isPlaying ? "pause" : "play"} onPress={() => app.togglePlay()} style={{ flex: 1 }} />
             <PrimaryButton label={t("music.next")} icon="play-skip-forward" variant="secondary" onPress={() => app.nextTrack()} style={{ flex: 1 }} />
+          </View>
+          <View style={[styles.row, { marginTop: 8 }]}>
+            <PrimaryButton
+              label={
+                app.repeatMode === "off" ? t("music.repeatOff")
+                : app.repeatMode === "all" ? t("music.repeatAll")
+                : t("music.repeatOne")
+              }
+              icon={app.repeatMode === "one" ? "repeat" : app.repeatMode === "all" ? "repeat-outline" : "refresh-outline"}
+              variant={app.repeatMode === "off" ? "secondary" : "primary"}
+              onPress={() => app.toggleRepeat()}
+              style={{ flex: 1 }}
+            />
           </View>
           <Text style={[styles.label, { marginTop: 10 }]}>{t("music.volume")}: {Math.round(app.volume * 100)}%</Text>
           <Slider minimumValue={0} maximumValue={1} value={app.volume} step={0.01}
