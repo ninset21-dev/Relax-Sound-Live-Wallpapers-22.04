@@ -9,11 +9,15 @@ export const theme = {
     surfaceLight: "rgba(170, 210, 185, 0.12)",
     border: "rgba(180, 230, 200, 0.14)",
     borderStrong: "rgba(180, 230, 200, 0.28)",
-    // Forest green accents matching the design mockups.
-    accent: "#1e3a2a",
+    // Forest green accents matching the design mockups. `accent` is the
+    // bright readable green used for buttons / icons / active chips. The
+    // darker `accentDark` variants are for backgrounds that still need to
+    // feel like the same family.
+    accent: "#22c55e",
+    accentGlow: "#22c55e",
     accentDim: "#163024",
     accentStrong: "#2b5a40",
-    accentGlow: "#22c55e",
+    accentDark: "#1e3a2a",
     textPrimary: "#f3f7f5",
     textSecondary: "#c6d4cc",
     textMuted: "#8fa698",

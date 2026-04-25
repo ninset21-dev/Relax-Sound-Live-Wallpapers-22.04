@@ -4,16 +4,18 @@ import { Stack } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as SystemUI from "expo-system-ui";
-import i18n from "i18next";
 import { AppProvider, useApp } from "@/contexts/AppContext";
 import "@/i18n";
+import { applyLanguage } from "@/i18n";
 import { theme } from "@/theme/theme";
 
 const LanguageBridge: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const app = useApp();
   useEffect(() => {
-    if (app.language === "ru" || app.language === "en") {
-      i18n.changeLanguage(app.language).catch(() => {});
+    // Hydrated language → i18next. Covers all 11 supported codes plus the
+    // "system" pseudo-code which falls back to the device locale.
+    if (app.language) {
+      try { applyLanguage(app.language); } catch {}
     }
   }, [app.language]);
   return <>{children}</>;

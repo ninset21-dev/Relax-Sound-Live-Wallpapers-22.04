@@ -2,7 +2,6 @@
   "expo": {
     "name": "Relax Sound Live Wallpapers",
     "slug": "relax-sound-live-wallpapers",
-    "owner": "alexander30",
     "version": "2.5.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -73,12 +72,13 @@
       "typedRoutes": true
     },
     "extra": {
-      "eas": {
-        "projectId": "873c3fa6-7b45-42a5-a0ab-8287b0e6afd7"
-      },
       "router": {
         "origin": false
+      },
+      "eas": {
+        "projectId": "019c2eb6-0d54-421f-a56f-54eec82ce085"
       }
-    }
+    },
+    "owner": "ninset20"
   }
 }

@@ -168,7 +168,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 10 },
   h1: { color: theme.colors.textPrimary, fontSize: 28, fontWeight: "800" },
   hSub: { color: theme.colors.accent, fontSize: 11, marginTop: 2, letterSpacing: 1 },
-  badgeOk: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, backgroundColor: "rgba(17,227,161,0.15)", borderWidth: 1, borderColor: theme.colors.border },
+  badgeOk: { flexDirection: "row", alignItems: "center", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, backgroundColor: "rgba(17,227,161,0.15)", borderWidth: 1, borderColor: theme.colors.border },
   badgeOkText: { color: theme.colors.accent, fontSize: 11, fontWeight: "600" },
   previewTag: { position: "absolute", bottom: 12, left: 12, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 14, backgroundColor: "rgba(0,0,0,0.45)" },
   previewTagText: { color: theme.colors.textPrimary, fontSize: 11, fontWeight: "600" },

@@ -208,25 +208,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Auto-change: persist the setting into the widget prefs so the native
   // LiveWallpaperService engine can rotate media on its own (works in the
-  // background even when the JS bundle isn't running). Also keep a
-  // foreground-only JS timer as a safety net / for immediate UI feedback.
+  // background even when the JS bundle isn't running. The native engine's
+  // maybeAutoSwap() drives the actual wallpaper rotation; a duplicate JS
+  // setInterval would race with it and produce double-rate swaps, so we
+  // only push the configuration here and let native do the work.
   useEffect(() => {
     Widget.setAutoChange(state.autoChangeEnabled, state.autoChangeSec).catch(() => {});
-    if (!state.autoChangeEnabled || state.mediaLibrary.length < 2) return;
-    const items = state.mediaLibrary;
-    let i = 0;
-    const id = setInterval(() => {
-      i = (i + 1) % items.length;
-      const pick = items[i];
-      // Clear the opposite media key so native setupMedia() picks the right
-      // source (video takes priority over image).
-      Wallpaper.updateWallpaperParams(
-        pick.type === "video"
-          ? { videoUri: pick.uri, imageUri: null }
-          : { imageUri: pick.uri, videoUri: null }
-      ).catch(() => {});
-    }, Math.max(10, state.autoChangeSec) * 1000);
-    return () => clearInterval(id);
   }, [state.autoChangeEnabled, state.autoChangeSec, state.mediaLibrary]);
 
   const api: Ctx = useMemo(
@@ -242,7 +229,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       },
       clearMedia: () => persist({ mediaLibrary: [] }),
       setTracks: (t) => persist({ tracks: t }),
-      removeTrack: (uri) => persist({ tracks: state.tracks.filter((t) => t.uri !== uri) }),
+      removeTrack: (uri) => {
+        const tracks = state.tracks.filter((t) => t.uri !== uri);
+        if (state.currentTrack?.uri === uri) {
+          persist({ tracks, currentTrack: undefined });
+        } else {
+          persist({ tracks });
+        }
+      },
       setVolume: (v) => {
         persist({ volume: v });
         Audio.setVolume(v).catch(() => {});
