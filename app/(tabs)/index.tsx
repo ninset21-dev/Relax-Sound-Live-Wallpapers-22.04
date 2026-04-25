@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BackgroundGradient } from "@/components/BackgroundGradient";
 import { GlassCard } from "@/components/GlassCard";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { VideoThumb } from "@/components/VideoThumb";
 import { theme } from "@/theme/theme";
 import { useApp, MediaItem } from "@/contexts/AppContext";
 import { fetchGooglePhotosAlbum, GPhoto } from "@/services/googlePhotos";
@@ -242,6 +243,14 @@ export default function HomeScreen() {
                   </Pressable>
                 ))}
               </View>
+              {/* Lock-screen limitation note (req #10): Android wallpapers
+                  on lock screen are static images only — videos and the
+                  auto-swap timer aren't supported by the OS. */}
+              {(app.wallpaperTarget === "lock" || app.wallpaperTarget === "both") && (
+                <Text style={[styles.body, { marginTop: 4, fontSize: 11, opacity: 0.85 }]}>
+                  {t("home.lockNote")}
+                </Text>
+              )}
               <View style={[styles.row, { gap: 6, marginTop: 6 }]}>
                 <PrimaryButton
                   label={t("home.applyWallpaper")}
@@ -342,9 +351,7 @@ export default function HomeScreen() {
                       {m.type === "image" ? (
                         <Image source={{ uri: m.uri }} style={StyleSheet.absoluteFillObject} />
                       ) : (
-                        <View style={[StyleSheet.absoluteFillObject, styles.videoBadge]}>
-                          <Ionicons name="videocam" size={26} color={theme.colors.accent} />
-                        </View>
+                        <VideoThumb uri={m.uri} style={StyleSheet.absoluteFillObject as any} />
                       )}
                       <View style={[styles.checkDot, sel && styles.checkDotOn]}>
                         {sel && <Ionicons name="checkmark" size={14} color="#0b1f14" />}

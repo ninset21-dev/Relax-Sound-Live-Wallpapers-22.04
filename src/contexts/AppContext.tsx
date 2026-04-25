@@ -139,6 +139,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       try { const active = await Wallpaper.isLiveWallpaperActive(); persist({ liveWallpaperActive: !!active }); } catch {}
       try { const a11y = await Accessibility.isEnabled(); persist({ a11yEnabled: !!a11y }); } catch {}
+
+      // First-launch autoplay (req #8): if the user has never played
+      // anything, start "Nature Radio Rain" automatically once Radio
+      // Browser returns a working stream. Subsequent launches honor the
+      // user's last selection / paused state.
+      try {
+        const seen = await AsyncStorage.getItem("relax_first_run_done");
+        if (!seen) {
+          await AsyncStorage.setItem("relax_first_run_done", "1");
+          const { searchStations } = require("@/services/radio");
+          const candidates: any[] = await searchStations({ name: "Nature Radio Rain", limit: 8 });
+          const fallback: any[] = candidates.length
+            ? candidates
+            : await searchStations({ tag: "rain", limit: 8 });
+          const pick = fallback.find((s: any) => s.url_resolved || s.url);
+          if (pick) {
+            const url = pick.url_resolved || pick.url;
+            const title = (pick.name || "Nature Radio Rain").toString().trim();
+            try { Audio.setPlaylist?.([{ uri: url, title }], 0); } catch {}
+            try { Audio.play(url, title); } catch {}
+            setState((p) => ({ ...p, currentTrack: { uri: url, title } }));
+          }
+        }
+      } catch {}
     })();
   }, []);
 

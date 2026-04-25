@@ -23,15 +23,18 @@ const LanguageBridge: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
 export default function RootLayout() {
   useEffect(() => {
-    SystemUI.setBackgroundColorAsync(theme.colors.bg).catch(() => {});
+    // Activity is translucent (see plugins/withTransparentActivity.js) — keep
+    // the system-UI window background fully transparent so the launcher
+    // shines through whenever BackgroundGradient fades to 0 uiOpacity.
+    SystemUI.setBackgroundColorAsync("transparent").catch(() => {});
   }, []);
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: theme.colors.bg }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: "transparent" }}>
       <SafeAreaProvider>
         <AppProvider>
           <LanguageBridge>
             <StatusBar style="light" />
-            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: theme.colors.bg } }}>
+            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "transparent" } }}>
               <Stack.Screen name="(tabs)" />
             </Stack>
           </LanguageBridge>

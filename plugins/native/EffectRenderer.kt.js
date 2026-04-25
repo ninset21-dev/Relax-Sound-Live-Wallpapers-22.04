@@ -34,12 +34,23 @@ class EffectRenderer(private val context: Context, private val prefs: SharedPref
     // particles feel like they're in the same weather, not independent.
     private var worldT: Float = 0f
 
+    private var lastFrameNs: Long = 0L
+
     fun drawOverlay(canvas: Canvas, effect: String, intensity: Float, speed: Float) {
         val w = canvas.width; val h = canvas.height
         if (w != lastW || h != lastH) { particles.clear(); lastW = w; lastH = h }
         val target = (intensity * 180).toInt().coerceIn(12, 260)
         while (particles.size < target) particles.add(spawn(effect, w, h))
-        val step = 0.016f * speed.coerceIn(0.2f, 3f)
+        // Motion is now frame-rate independent — we use the wall-clock
+        // delta between draws (capped at 50 ms to avoid huge jumps if the
+        // engine paused, e.g. the user backgrounded the app). This removes
+        // the user-visible "jerks" the user reported when the FPS swings
+        // (req #5: equal motion).
+        val now = System.nanoTime()
+        val rawDelta = if (lastFrameNs == 0L) 0.016f else (now - lastFrameNs) / 1_000_000_000f
+        lastFrameNs = now
+        val deltaSec = rawDelta.coerceIn(0.001f, 0.05f)
+        val step = deltaSec * speed.coerceIn(0.2f, 3f)
         worldT += step
         // Global wind: slow oscillation so all particles drift coherently.
         val wind = sin(worldT * 0.4f) * 0.5f + cos(worldT * 0.17f) * 0.3f

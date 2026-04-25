@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { ScrollView, View, Text, StyleSheet, Pressable, Linking, Modal, Alert } from "react-native";
-import Slider from "@react-native-community/slider";
+import { SmoothSlider } from "@/components/SmoothSlider";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
 import i18n from "i18next";
@@ -90,7 +90,7 @@ export default function SettingsScreen() {
           <Text style={styles.sectionTitle}>{t("settings.uiOpacity")}</Text>
           <Text style={styles.body}>{t("settings.uiOpacityHint")}</Text>
           <Text style={[styles.body, { marginTop: 6 }]}>{Math.round(app.uiOpacity * 100)}%</Text>
-          <Slider
+          <SmoothSlider
             minimumValue={0}
             maximumValue={1}
             value={app.uiOpacity}
@@ -98,7 +98,7 @@ export default function SettingsScreen() {
             minimumTrackTintColor={theme.colors.accent}
             maximumTrackTintColor={theme.colors.border}
             thumbTintColor={theme.colors.accent}
-            onValueChange={(v) => app.setUiOpacity(v)}
+            onSlidingComplete={(v) => app.setUiOpacity(v)}
           />
         </GlassCard>
 

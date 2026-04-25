@@ -67,10 +67,20 @@ class RelaxWallpaperModule(reactContext: ReactApplicationContext) :
         return try {
             val ctx = reactApplicationContext
             if (srcUri.startsWith("file://") || srcUri.startsWith("/")) return srcUri
-            val dest = File(ctx.filesDir, "wallpaper_video.mp4")
-            ctx.contentResolver.openInputStream(Uri.parse(srcUri))?.use { input ->
-                dest.outputStream().use { output -> input.copyTo(output) }
-            } ?: return null
+            // Use a hash-suffixed filename so applying a *different* video
+            // produces a different file path — the wallpaper engine caches
+            // by URI string, so reusing the same path would let the old
+            // clip keep playing (req #11 regression: video wallpaper not
+            // updating). Also forces a fresh file even if the previous
+            // copy was partial / truncated by a crash.
+            val hash = Integer.toHexString(srcUri.hashCode())
+            val dest = File(ctx.filesDir, "wallpaper_video_$hash.mp4")
+            dest.parentFile?.mkdirs()
+            if (!dest.exists() || dest.length() == 0L) {
+                val input = ctx.contentResolver.openInputStream(Uri.parse(srcUri)) ?: return null
+                input.use { i -> dest.outputStream().use { o -> i.copyTo(o) } }
+            }
+            if (!dest.exists() || dest.length() == 0L) return null
             "file://" + dest.absolutePath
         } catch (_: Throwable) { null }
     }
@@ -79,10 +89,14 @@ class RelaxWallpaperModule(reactContext: ReactApplicationContext) :
         return try {
             val ctx = reactApplicationContext
             if (srcUri.startsWith("file://") || srcUri.startsWith("/")) return srcUri
-            val dest = File(ctx.filesDir, "wallpaper_image.bin")
-            ctx.contentResolver.openInputStream(Uri.parse(srcUri))?.use { input ->
-                dest.outputStream().use { output -> input.copyTo(output) }
-            } ?: return null
+            val hash = Integer.toHexString(srcUri.hashCode())
+            val dest = File(ctx.filesDir, "wallpaper_image_$hash.bin")
+            dest.parentFile?.mkdirs()
+            if (!dest.exists() || dest.length() == 0L) {
+                val input = ctx.contentResolver.openInputStream(Uri.parse(srcUri)) ?: return null
+                input.use { i -> dest.outputStream().use { o -> i.copyTo(o) } }
+            }
+            if (!dest.exists() || dest.length() == 0L) return null
             "file://" + dest.absolutePath
         } catch (_: Throwable) { null }
     }

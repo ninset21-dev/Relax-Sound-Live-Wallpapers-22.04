@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ScrollView, View, Text, StyleSheet, Pressable, Alert } from "react-native";
-import Slider from "@react-native-community/slider";
+import { SmoothSlider } from "@/components/SmoothSlider";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
 import * as DocumentPicker from "expo-document-picker";
@@ -113,15 +113,15 @@ export default function MusicScreen() {
             />
           </View>
           <Text style={[styles.label, { marginTop: 10 }]}>{t("music.volume")}: {Math.round(app.volume * 100)}%</Text>
-          <Slider minimumValue={0} maximumValue={1} value={app.volume} step={0.01}
+          <SmoothSlider minimumValue={0} maximumValue={1} value={app.volume} step={0.01}
             minimumTrackTintColor={theme.colors.accent} maximumTrackTintColor={theme.colors.border}
             thumbTintColor={theme.colors.accent}
-            onValueChange={(v) => app.setVolume(v)}/>
+            onSlidingComplete={(v) => app.setVolume(v)}/>
           <Text style={styles.label}>{t("music.fadeIn")}: {Math.round(app.fadeMs / 100) / 10}s</Text>
-          <Slider minimumValue={200} maximumValue={10000} value={app.fadeMs} step={100}
+          <SmoothSlider minimumValue={200} maximumValue={10000} value={app.fadeMs} step={100}
             minimumTrackTintColor={theme.colors.accent} maximumTrackTintColor={theme.colors.border}
             thumbTintColor={theme.colors.accent}
-            onValueChange={(v) => app.setFadeMs(Math.round(v))}/>
+            onSlidingComplete={(v) => app.setFadeMs(Math.round(v))}/>
         </GlassCard>
 
         <GlassCard>

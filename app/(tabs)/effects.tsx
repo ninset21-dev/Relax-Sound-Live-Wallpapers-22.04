@@ -1,6 +1,6 @@
 import React from "react";
 import { ScrollView, View, Text, StyleSheet, Pressable } from "react-native";
-import Slider from "@react-native-community/slider";
+import { SmoothSlider } from "@/components/SmoothSlider";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -66,28 +66,28 @@ export default function EffectsScreen() {
             <Text style={styles.label}>{t("effects.fpsLabel")}</Text>
             <Text style={styles.value}>{app.fps} FPS</Text>
           </View>
-          <Slider minimumValue={10} maximumValue={60} value={app.fps} step={1}
+          <SmoothSlider minimumValue={10} maximumValue={60} value={app.fps} step={1}
             minimumTrackTintColor={theme.colors.accent} maximumTrackTintColor={theme.colors.border}
             thumbTintColor={theme.colors.accent}
-            onValueChange={(v) => app.setFps(Math.round(v))} />
+            onSlidingComplete={(v) => app.setFps(Math.round(v))} />
 
           <View style={[styles.rowBetween, { marginTop: 10 }]}>
             <Text style={styles.label}>{t("effects.intensity")}</Text>
             <Text style={styles.value}>{Math.round(app.intensity * 100)}%</Text>
           </View>
-          <Slider minimumValue={0} maximumValue={1} value={app.intensity} step={0.01}
+          <SmoothSlider minimumValue={0} maximumValue={1} value={app.intensity} step={0.01}
             minimumTrackTintColor={theme.colors.accent} maximumTrackTintColor={theme.colors.border}
             thumbTintColor={theme.colors.accent}
-            onValueChange={(v) => app.setIntensity(v)} />
+            onSlidingComplete={(v) => app.setIntensity(v)} />
 
           <View style={[styles.rowBetween, { marginTop: 10 }]}>
             <Text style={styles.label}>{t("effects.speed")}</Text>
             <Text style={styles.value}>{app.speed.toFixed(2)}×</Text>
           </View>
-          <Slider minimumValue={0.2} maximumValue={3} value={app.speed} step={0.05}
+          <SmoothSlider minimumValue={0.2} maximumValue={3} value={app.speed} step={0.05}
             minimumTrackTintColor={theme.colors.accent} maximumTrackTintColor={theme.colors.border}
             thumbTintColor={theme.colors.accent}
-            onValueChange={(v) => app.setSpeed(v)} />
+            onSlidingComplete={(v) => app.setSpeed(v)} />
         </GlassCard>
 
         {/* Reset button + lock/home target buttons removed (req #16).

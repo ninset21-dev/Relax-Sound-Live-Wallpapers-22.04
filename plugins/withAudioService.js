@@ -252,12 +252,22 @@ class RelaxAudioService : Service() {
 
     private fun play(url: String, gapless: Boolean = false) {
         if (!requestFocus()) return
+        // Gapless / crossfade path: keep the current player playing the old
+        // station while a SECOND ExoPlayer buffers the new URL. Once the new
+        // player reaches STATE_READY we crossfade volumes (~400 ms) and
+        // release the old player. The user perceives one continuous stream.
+        if (gapless && player?.isPlaying == true) {
+            crossfadeTo(url)
+            getSharedPreferences("relax_audio", MODE_PRIVATE).edit()
+                .putBoolean("was_playing", true)
+                .putString("last_url", url)
+                .putString("last_title", currentTitle)
+                .apply()
+            startForeground(NOTIF_ID, buildNotification())
+            return
+        }
         ensurePlayer()
-        // For gapless track switches we keep the previous volume so the new
-        // track starts at full level (no perceived pause). For a fresh play
-        // (cold start, station change, resume after pause) we fade in from 0
-        // for a smooth ramp.
-        val startVol = if (gapless) (if (ducked) targetVolume * 0.2f else targetVolume) else 0f
+        val startVol = 0f
         player?.apply {
             stop()
             clearMediaItems()
@@ -266,7 +276,7 @@ class RelaxAudioService : Service() {
             volume = startVol
             playWhenReady = true
         }
-        fadeInVolume(quick = gapless)
+        fadeInVolume(quick = false)
         // Persist the last URL so fadeInAndResume() can restore playback even
         // after the service was killed and the player lost its media item.
         getSharedPreferences("relax_audio", MODE_PRIVATE).edit()
@@ -275,6 +285,72 @@ class RelaxAudioService : Service() {
             .putString("last_title", currentTitle)
             .apply()
         startForeground(NOTIF_ID, buildNotification())
+    }
+
+    /**
+     * Build a second ExoPlayer that buffers the new url silently while the main
+     * player keeps the existing station audible. Once the new player is
+     * READY, fade the two volumes in opposite directions and release the
+     * old player. Removes the audible "pause" the user reported when
+     * tapping a different radio station while one was already playing.
+     */
+    private var swapPlayer: ExoPlayer? = null
+    private var swapListener: Player.Listener? = null
+
+    private fun crossfadeTo(url: String) {
+        // If a previous crossfade is still in flight, drop it cleanly first
+        // — otherwise we'd leak a buffered ExoPlayer.
+        swapListener?.let { l -> swapPlayer?.removeListener(l) }
+        swapPlayer?.let { try { it.release() } catch (_: Throwable) {} }
+
+        val sp = ExoPlayer.Builder(this).build()
+        sp.volume = 0f
+        sp.setMediaItem(MediaItem.fromUri(Uri.parse(url)))
+        sp.prepare()
+        sp.playWhenReady = true
+
+        val listenerRef = arrayOfNulls<Player.Listener>(1)
+        val listener = object : Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state != Player.STATE_READY) return
+                // Already moved to crossfade — guard against another READY
+                // event firing twice.
+                listenerRef[0]?.let { sp.removeListener(it) }
+                fadeRunner?.let { handler.removeCallbacks(it) }
+                val oldP = player
+                val newP = sp
+                val cap = if (ducked) targetVolume * 0.2f else targetVolume
+                val steps = 12
+                val totalMs = 400L
+                val stepDelay = (totalMs / steps).coerceAtLeast(15L)
+                var i = 0
+                val runner = object : Runnable {
+                    override fun run() {
+                        i++
+                        val frac = i.toFloat() / steps
+                        try { oldP?.volume = (cap * (1f - frac)).coerceIn(0f, 1f) } catch (_: Throwable) {}
+                        try { newP.volume = (cap * frac).coerceIn(0f, 1f) } catch (_: Throwable) {}
+                        if (i < steps) {
+                            handler.postDelayed(this, stepDelay)
+                        } else {
+                            // Promote new to main, release old.
+                            try { oldP?.release() } catch (_: Throwable) {}
+                            player = newP
+                            swapPlayer = null
+                            swapListener = null
+                            fadeRunner = null
+                            broadcastState()
+                        }
+                    }
+                }
+                fadeRunner = runner
+                handler.post(runner)
+            }
+        }
+        listenerRef[0] = listener
+        swapListener = listener
+        sp.addListener(listener)
+        swapPlayer = sp
     }
 
     private fun togglePlayPause() {
@@ -669,16 +745,26 @@ class AudioWakeReceiver : BroadcastReceiver() {
                 val prefs = ctx.getSharedPreferences("relax_audio", Context.MODE_PRIVATE)
                 val wasPlaying = prefs.getBoolean("was_playing", false)
                 val lastUrl = prefs.getString("last_url", null)
+                // Resume only if the user had something playing before lock —
+                // a fresh boot with no last_url should not auto-blast audio.
+                // (The first-launch default station is started from the JS
+                // layer when AppContext hydrates, where the user is actually
+                // looking at the app.)
                 if (!wasPlaying || lastUrl.isNullOrBlank()) return
-                // Wake the foreground service. It will pick up was_playing and
-                // resume via fadeInAndResume() in onStartCommand → ACTION_RESUME.
                 val svc = Intent(ctx, RelaxAudioService::class.java).apply {
                     action = RelaxAudioService.ACTION_RESUME
                 }
                 try {
+                    // USER_PRESENT, SCREEN_ON and BOOT_COMPLETED are all
+                    // exempt from Android 12's foreground-service start
+                    // restriction (BG_FGS_START_NOT_ALLOWED). Wrap in
+                    // try/catch anyway — vendor ROMs sometimes still throw
+                    // and a silent failure beats a crash on user unlock.
                     if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(svc)
                     else ctx.startService(svc)
-                } catch (_: Throwable) {}
+                } catch (_: Throwable) {
+                    try { ctx.startService(svc) } catch (_: Throwable) {}
+                }
             }
         }
     }

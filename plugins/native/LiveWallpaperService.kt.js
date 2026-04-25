@@ -155,9 +155,7 @@ class RelaxWallpaperService : WallpaperService() {
                         decodeHandler.post {
                             var bm: android.graphics.Bitmap? = null
                             try {
-                                contentResolver.openInputStream(Uri.parse(newUri))?.use { input ->
-                                    bm = BitmapFactory.decodeStream(input)
-                                }
+                                bm = decodeSampled(newUri)
                             } catch (t: Throwable) { Log.e(TAG, "swap decode", t) }
                             // Publish the result back on the main handler so
                             // cachedBg reads/writes stay single-threaded with
@@ -320,12 +318,39 @@ class RelaxWallpaperService : WallpaperService() {
             return Rect(dx, dy, dx + dstW, dy + dstH)
         }
 
+        /**
+         * Decode an image URI at roughly screen resolution using
+         * BitmapFactory.Options.inSampleSize. A 4K photo decoded at full
+         * size is 60+ MB and takes 100-500 ms to copy to the surface every
+         * frame — the user reported lag on the smooth wallpaper crossfade
+         * (req #6). Downsampling to ~screen resolution keeps fades smooth.
+         */
+        private fun decodeSampled(uri: String): android.graphics.Bitmap? {
+            return try {
+                val targetW = (resources.displayMetrics.widthPixels.coerceAtLeast(720))
+                val targetH = (resources.displayMetrics.heightPixels.coerceAtLeast(1280))
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                contentResolver.openInputStream(Uri.parse(uri))?.use { input ->
+                    BitmapFactory.decodeStream(input, null, bounds)
+                }
+                var sample = 1
+                val w = bounds.outWidth.coerceAtLeast(1)
+                val h = bounds.outHeight.coerceAtLeast(1)
+                while (w / (sample * 2) >= targetW && h / (sample * 2) >= targetH) sample *= 2
+                val opts = BitmapFactory.Options().apply {
+                    inSampleSize = sample
+                    inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888
+                }
+                contentResolver.openInputStream(Uri.parse(uri))?.use { input ->
+                    BitmapFactory.decodeStream(input, null, opts)
+                }
+            } catch (t: Throwable) { Log.e(TAG, "decode sampled", t); null }
+        }
+
         private fun drawImage(holder: SurfaceHolder, uri: String?) {
             if (uri != null) {
                 try {
-                    contentResolver.openInputStream(Uri.parse(uri))?.use { input ->
-                        cachedBg = BitmapFactory.decodeStream(input)
-                    }
+                    cachedBg = decodeSampled(uri)
                     cachedBgUri = uri
                 } catch (t: Throwable) {
                     Log.e(TAG, "decode image failed", t)

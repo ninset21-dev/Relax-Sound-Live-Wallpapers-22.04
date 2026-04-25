@@ -42,17 +42,35 @@ export const EffectPreview: React.FC<{
   useEffect(() => {
     let mounted = true;
     let raf: number;
-    const loop = () => {
+    let lastTs = 0;
+    let worldT = 0;
+    const gravityFor = (e: EffectKind): number =>
+      e === "rain" ? 28
+      : e === "snow" ? 4
+      : e === "leaves" || e === "flowers" || e === "cherryblossom" ? 3.2
+      : e === "bubbles" ? -3.5
+      : 0;
+    const loop = (ts: number) => {
       if (!mounted) return;
-      // Step particles
       const p = particlesRef.current;
       while (p.length < targetCount) p.push(spawn(effect, W, H));
-      // Effects move at a single uniform tempo (req: "make motion uniform").
-      // We still expose `speed` as a fine-tuning multiplier but bias it
-      // tightly around 1× so tiles all flow with the same rhythm.
-      const step = 0.016 * (0.85 + Math.max(0.2, Math.min(3, speed)) * 0.15);
+      // Frame-rate independent stepping — actual elapsed delta keeps
+      // motion smooth regardless of JS thread jitter (req #5).
+      const dt = lastTs ? Math.min(0.05, Math.max(0.001, (ts - lastTs) / 1000)) : 0.016;
+      lastTs = ts;
+      const step = dt * Math.max(0.2, Math.min(3, speed));
+      worldT += step;
+      // Same physics (gravity + slow wind oscillation) the native
+      // EffectRenderer applies (req #4 — in-app effect must mirror the
+      // live-wallpaper engine).
+      const wind = Math.sin(worldT * 0.4) * 0.5 + Math.cos(worldT * 0.17) * 0.3;
+      const gravity = gravityFor(effect);
       for (let i = p.length - 1; i >= 0; i--) {
         const q = p[i];
+        q.vx += wind * step * 0.6;
+        q.vy += gravity * step;
+        q.vx *= 0.995;
+        q.vy *= effect === "bubbles" ? 0.997 : 0.999;
         q.x += q.vx * step * 60;
         q.y += q.vy * step * 60;
         q.life -= step;
