@@ -11,22 +11,22 @@ import { Hint } from "@/components/Hint";
 import { theme } from "@/theme/theme";
 import { useApp, EffectKind } from "@/contexts/AppContext";
 
-const EFFECTS: { key: EffectKind; icon: React.ComponentProps<typeof Ionicons>["name"]; title: string }[] = [
-  { key: "none", icon: "ban-outline", title: "Без эффекта" },
-  { key: "snow", icon: "snow-outline", title: "Снег" },
-  { key: "rain", icon: "rainy-outline", title: "Дождь" },
-  { key: "bubbles", icon: "ellipse-outline", title: "Пузыри" },
-  { key: "leaves", icon: "leaf-outline", title: "Листья" },
-  { key: "flowers", icon: "flower-outline", title: "Цветы" },
-  { key: "particles", icon: "sparkles-outline", title: "Частицы" },
-  { key: "fireflies", icon: "bulb-outline", title: "Светлячки" },
-  { key: "fog", icon: "cloudy-outline", title: "Туман" },
-  { key: "frost", icon: "snow-outline", title: "Иней" },
-  { key: "stars", icon: "star-outline", title: "Звёзды" },
-  { key: "aurora", icon: "color-wand-outline", title: "Сияние" },
-  { key: "meteor", icon: "flash-outline", title: "Метеоры" },
-  { key: "cherryblossom", icon: "flower-outline", title: "Сакура" },
-  { key: "plasma", icon: "color-filter-outline", title: "Плазма" },
+const EFFECTS: { key: EffectKind; icon: React.ComponentProps<typeof Ionicons>["name"]; i18nKey: string }[] = [
+  { key: "none", icon: "ban-outline", i18nKey: "effects.none" },
+  { key: "snow", icon: "snow-outline", i18nKey: "effects.snow" },
+  { key: "rain", icon: "rainy-outline", i18nKey: "effects.rain" },
+  { key: "bubbles", icon: "ellipse-outline", i18nKey: "effects.bubbles" },
+  { key: "leaves", icon: "leaf-outline", i18nKey: "effects.leaves" },
+  { key: "flowers", icon: "flower-outline", i18nKey: "effects.flowers" },
+  { key: "particles", icon: "sparkles-outline", i18nKey: "effects.particles" },
+  { key: "fireflies", icon: "bulb-outline", i18nKey: "effects.fireflies" },
+  { key: "fog", icon: "cloudy-outline", i18nKey: "effects.fog" },
+  { key: "frost", icon: "snow-outline", i18nKey: "effects.frost" },
+  { key: "stars", icon: "star-outline", i18nKey: "effects.stars" },
+  { key: "aurora", icon: "color-wand-outline", i18nKey: "effects.aurora" },
+  { key: "meteor", icon: "flash-outline", i18nKey: "effects.meteor" },
+  { key: "cherryblossom", icon: "flower-outline", i18nKey: "effects.cherryblossom" },
+  { key: "plasma", icon: "color-filter-outline", i18nKey: "effects.plasma" },
 ];
 
 export default function EffectsScreen() {
@@ -134,7 +134,7 @@ export default function EffectsScreen() {
             return (
               <Pressable key={e.key} onPress={() => app.setEffect(e.key)} style={[styles.layerCell, isSelected && styles.layerCellActive]}>
                 <Ionicons name={e.icon} size={24} color={isSelected ? "#0b1f14" : theme.colors.accent} />
-                <Text style={[styles.layerLabel, isSelected && styles.layerLabelActive]}>{e.title}</Text>
+                <Text style={[styles.layerLabel, isSelected && styles.layerLabelActive]}>{t(e.i18nKey)}</Text>
                 <View style={[styles.switchDot, isSelected && styles.switchDotOn]}>
                   <View style={[styles.switchKnob, isSelected && styles.switchKnobOn]} />
                 </View>
@@ -144,13 +144,13 @@ export default function EffectsScreen() {
         </View>
 
         <PrimaryButton
-          label="Применить на экран блокировки"
+          label={t("home.setLock")}
           icon="lock-closed-outline"
           onPress={() => app.applyLiveWallpaper("lock")}
           style={{ marginTop: 12 }}
         />
         <PrimaryButton
-          label="Применить на главный экран"
+          label={t("home.setHome")}
           icon="home-outline"
           variant="secondary"
           onPress={() => app.applyLiveWallpaper("home")}
