@@ -41,6 +41,7 @@ class RelaxAudioService : Service() {
         const val EXTRA_URL = "url"
         const val EXTRA_TITLE = "title"
         const val EXTRA_VOLUME = "volume"
+        const val EXTRA_GAPLESS = "gapless"
         const val CHANNEL_ID = "relax_audio_channel"
         const val NOTIF_ID = 4711
         const val TAG = "RelaxAudio"
@@ -109,7 +110,8 @@ class RelaxAudioService : Service() {
             ACTION_PLAY -> {
                 val url = intent.getStringExtra(EXTRA_URL) ?: return START_NOT_STICKY
                 currentTitle = intent.getStringExtra(EXTRA_TITLE) ?: "Relax"
-                play(url)
+                val gapless = intent.getBooleanExtra(EXTRA_GAPLESS, false)
+                play(url, gapless)
             }
             ACTION_PAUSE -> pauseInternal(userInitiated = true)
             ACTION_TOGGLE -> togglePlayPause()
@@ -177,7 +179,9 @@ class RelaxAudioService : Service() {
             if (url.isBlank()) return
             prefs.edit().putInt("playlist_index", idx).apply()
             currentTitle = title
-            play(url)
+            // Track switch must feel instant — short fade-in (no perceived
+            // pause). Caller (widget/app) explicitly chose to switch tracks.
+            play(url, gapless = true)
             sendBroadcast(
                 Intent("${PKG}.audio.TRACK_CHANGED").setPackage(packageName)
                     .putExtra("uri", url).putExtra("title", title).putExtra("index", idx)
@@ -246,18 +250,23 @@ class RelaxAudioService : Service() {
         }
     }
 
-    private fun play(url: String) {
+    private fun play(url: String, gapless: Boolean = false) {
         if (!requestFocus()) return
         ensurePlayer()
+        // For gapless track switches we keep the previous volume so the new
+        // track starts at full level (no perceived pause). For a fresh play
+        // (cold start, station change, resume after pause) we fade in from 0
+        // for a smooth ramp.
+        val startVol = if (gapless) (if (ducked) targetVolume * 0.2f else targetVolume) else 0f
         player?.apply {
             stop()
             clearMediaItems()
             setMediaItem(MediaItem.fromUri(Uri.parse(url)))
             prepare()
-            volume = 0f
+            volume = startVol
             playWhenReady = true
         }
-        fadeInVolume()
+        fadeInVolume(quick = gapless)
         // Persist the last URL so fadeInAndResume() can restore playback even
         // after the service was killed and the player lost its media item.
         getSharedPreferences("relax_audio", MODE_PRIVATE).edit()
@@ -354,9 +363,14 @@ class RelaxAudioService : Service() {
 
     private var fadeRunner: Runnable? = null
 
-    private fun fadeInVolume() {
-        val steps = 20
-        val durationMs = getSharedPreferences("relax_audio", MODE_PRIVATE).getInt("fade_ms", 2500)
+    private fun fadeInVolume(quick: Boolean = false) {
+        // For track switches we use a 200 ms ramp instead of the full
+        // user-configured fade — the user wants the next track to start
+        // playing without a perceived pause.
+        val steps = if (quick) 4 else 20
+        val durationMs =
+            if (quick) 200
+            else getSharedPreferences("relax_audio", MODE_PRIVATE).getInt("fade_ms", 2500)
         val stepDelay = (durationMs / steps).toLong().coerceAtLeast(20L)
         fadeRunner?.let { handler.removeCallbacks(it) }
         var i = 0
@@ -406,6 +420,12 @@ class RelaxAudioService : Service() {
         getSharedPreferences("relax_audio", MODE_PRIVATE).edit()
             .putString("title", currentTitle)
             .putFloat("vol", targetVolume)
+            // is_playing reflects the actual ExoPlayer state (false during
+            // focus loss, screen off, etc) — separate from was_playing which
+            // captures user intent for auto-resume. Widgets and the volume
+            // broadcast read this rather than was_playing to avoid showing a
+            // false "Pause" icon while the player is silent.
+            .putBoolean("is_playing", player?.isPlaying == true)
             .apply()
     }
 
@@ -498,12 +518,26 @@ class RelaxAudioModule(reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun play(url: String, title: String, promise: Promise) {
+        playInternal(url, title, gapless = false, promise = promise)
+    }
+
+    /**
+     * Switch to a different track without the long fade-in (req: next/prev
+     * must not feel like the player paused). Used by JS nextTrack/prevTrack.
+     */
+    @ReactMethod
+    fun playSwitch(url: String, title: String, promise: Promise) {
+        playInternal(url, title, gapless = true, promise = promise)
+    }
+
+    private fun playInternal(url: String, title: String, gapless: Boolean, promise: Promise) {
         try {
             val ctx = reactApplicationContext
             val i = Intent(ctx, RelaxAudioService::class.java).apply {
                 action = RelaxAudioService.ACTION_PLAY
                 putExtra(RelaxAudioService.EXTRA_URL, url)
                 putExtra(RelaxAudioService.EXTRA_TITLE, title)
+                putExtra(RelaxAudioService.EXTRA_GAPLESS, gapless)
             }
             if (android.os.Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i) else ctx.startService(i)
             promise.resolve(true)
@@ -534,7 +568,11 @@ class RelaxAudioModule(reactContext: ReactApplicationContext) :
                 Intent(RelaxAudioService.ACTION_STATE)
                     .setPackage(ctx.packageName)
                     .putExtra("title", prefs.getString("title", "Relax Sound"))
-                    .putExtra("isPlaying", prefs.getBoolean("was_playing", false))
+                    // Use is_playing (real player state from broadcastState),
+                    // not was_playing (user intent for auto-resume), so the
+                    // UI doesn't briefly flash a Pause icon when adjusting
+                    // volume during a focus-loss interruption.
+                    .putExtra("isPlaying", prefs.getBoolean("is_playing", false))
                     .putExtra("volume", v)
                     .putExtra("repeatMode", prefs.getString("repeat_mode", "off"))
             )

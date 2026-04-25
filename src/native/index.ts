@@ -31,6 +31,7 @@ interface WallpaperModuleI {
 }
 interface AudioModuleI {
   play(url: string, title: string): Promiselike<boolean>;
+  playSwitch?(url: string, title: string): Promiselike<boolean>;
   pause(): Promiselike<boolean>;
   toggle(): Promiselike<boolean>;
   setVolume(v: number): Promiselike<boolean>;

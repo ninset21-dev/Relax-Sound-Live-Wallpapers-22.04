@@ -282,9 +282,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setUiOpacity: (v) => persist({ uiOpacity: Math.max(0, Math.min(1, v)) }),
       setWallpaperTarget: (t) => persist({ wallpaperTarget: t }),
       play: async (t) => {
+        // If something is already playing, treat this as a track/station
+        // switch — use the short fade-in path so the user doesn't perceive
+        // a pause between the two items.
+        const switching = state.isPlaying || !!state.currentTrack;
         persist({ currentTrack: t });
         try {
-          await Audio.play(t.uri, t.title);
+          if (switching && Audio.playSwitch) await Audio.playSwitch(t.uri, t.title);
+          else await Audio.play(t.uri, t.title);
           await Widget.updateWidgetState(t.title, state.volume, "audio");
         } catch (e) { console.warn("play fail", e); }
       },
@@ -296,7 +301,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           : -1;
         const next = state.tracks[(idx + 1) % state.tracks.length];
         persist({ currentTrack: next });
-        try { await Audio.play(next.uri, next.title); } catch {}
+        // Use playSwitch (short fade-in) so the user doesn't perceive a pause
+        // between the previous and next track.
+        try {
+          if (Audio.playSwitch) await Audio.playSwitch(next.uri, next.title);
+          else await Audio.play(next.uri, next.title);
+        } catch {}
       },
       prevTrack: async () => {
         if (state.tracks.length === 0) return;
@@ -305,7 +315,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           : -1;
         const prev = state.tracks[(idx - 1 + state.tracks.length) % state.tracks.length];
         persist({ currentTrack: prev });
-        try { await Audio.play(prev.uri, prev.title); } catch {}
+        try {
+          if (Audio.playSwitch) await Audio.playSwitch(prev.uri, prev.title);
+          else await Audio.play(prev.uri, prev.title);
+        } catch {}
       },
       applyLiveWallpaper: async (mode) => {
         try {

@@ -24,8 +24,11 @@ export default function MusicScreen() {
   // Collapsible state for radio/my-music sections (req #2).
   const [radioOpen, setRadioOpen] = useState(true);
   const [musicOpen, setMusicOpen] = useState(true);
+  // genreRef + loadIdRef are updated synchronously inside loadGenre so the
+  // stale-result guard works even if React hasn't committed the render yet
+  // (e.g. user rapidly taps multiple genres).
   const genreRef = useRef(genre);
-  useEffect(() => { genreRef.current = genre; }, [genre]);
+  const loadIdRef = useRef(0);
 
   const pickTracks = useCallback(async () => {
     const r = await DocumentPicker.getDocumentAsync({ type: "audio/*", multiple: true, copyToCacheDirectory: false });
@@ -36,21 +39,29 @@ export default function MusicScreen() {
   }, [app]);
 
   const loadGenre = useCallback(async (g: string, q?: typeof app.quality) => {
+    // Update refs SYNCHRONOUSLY (not via useEffect) so stale-result guards
+    // work even when the user rapidly taps a different genre before React
+    // commits the previous render.
+    const myId = ++loadIdRef.current;
+    genreRef.current = g;
     setLoading(true); setGenre(g);
     try {
       const fetched = await popularByGenre(g, q ?? app.quality);
+      if (loadIdRef.current !== myId) return;
       setStations(fetched);
       // Probe reachability using the already-fetched list (no duplicate API
       // call). Keep `loading` true through the probe so users see a spinner
       // instead of stations silently disappearing seconds later.
       try {
         const alive = await probeStations(fetched.slice(0, 30));
-        if (genreRef.current !== g) return;
+        if (loadIdRef.current !== myId) return;
         const aliveUrls = new Set(alive.map((a) => a.url_resolved || a.url));
         setStations((prev) => prev.filter((p) => aliveUrls.has(p.url_resolved || p.url) || prev.indexOf(p) >= 30));
       } catch {}
     } finally {
-      setLoading(false);
+      // Only the most recent loadGenre call should clear the spinner — older
+      // calls finishing late must not stomp on a fresh in-flight load.
+      if (loadIdRef.current === myId) setLoading(false);
     }
   }, [app.quality]);
 
