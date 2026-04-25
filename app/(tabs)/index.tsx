@@ -213,7 +213,7 @@ export default function HomeScreen() {
         <View style={styles.brand}>
           <View>
             <Text style={styles.brandH1}>NINSET</Text>
-            <Text style={styles.brandSub}>Nature Engine v2.4</Text>
+            <Text style={styles.brandSub}>Nature Engine v2.5</Text>
           </View>
           <View style={styles.brandIcon}>
             <Ionicons name="leaf" size={22} color={theme.colors.accent} />
