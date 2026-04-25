@@ -33,13 +33,16 @@ export default function MusicScreen() {
     setLoading(true); setGenre(g);
     try {
       const s = await popularByGenre(g, q ?? app.quality);
-      // Show results immediately; probe in background and remove dead
-      // stations progressively so the list stays responsive.
       setStations(s);
-      const alive = await probeStations(s.slice(0, 30));
+    } finally { setLoading(false); }
+    // Probe reachability AFTER clearing the loading spinner so the list
+    // appears immediately; dead stations are filtered out progressively.
+    try {
+      const current = await popularByGenre(g, q ?? app.quality);
+      const alive = await probeStations(current.slice(0, 30));
       const aliveUrls = new Set(alive.map((a) => a.url_resolved || a.url));
       setStations((prev) => prev.filter((p) => aliveUrls.has(p.url_resolved || p.url) || prev.indexOf(p) >= 30));
-    } finally { setLoading(false); }
+    } catch {}
   }, [app.quality]);
 
   useEffect(() => { loadGenre(genre); }, []);

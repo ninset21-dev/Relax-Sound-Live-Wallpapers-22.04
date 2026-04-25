@@ -53,7 +53,7 @@ export const EffectPreview: React.FC<{
         q.y += q.vy * step * 60;
         q.life -= step;
         q.phase += step * 2;
-        if (q.life <= 0 || q.y > H + 40 || q.x < -40 || q.x > W + 40) p.splice(i, 1);
+        if (q.life <= 0 || q.y > H + 40 || q.y < -40 || q.x < -40 || q.x > W + 40) p.splice(i, 1);
       }
       setTick((t) => (t + 1) % 10000);
       raf = requestAnimationFrame(loop);
