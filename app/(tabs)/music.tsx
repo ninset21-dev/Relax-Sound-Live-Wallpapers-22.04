@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ScrollView, View, Text, StyleSheet, Pressable } from "react-native";
 import Slider from "@react-native-community/slider";
 import { Ionicons } from "@expo/vector-icons";
@@ -20,6 +20,8 @@ export default function MusicScreen() {
   const [genre, setGenre] = useState("relax");
   const [stations, setStations] = useState<Station[]>([]);
   const [loading, setLoading] = useState(false);
+  const genreRef = useRef(genre);
+  useEffect(() => { genreRef.current = genre; }, [genre]);
 
   const pickTracks = useCallback(async () => {
     const r = await DocumentPicker.getDocumentAsync({ type: "audio/*", multiple: true, copyToCacheDirectory: false });
@@ -31,15 +33,17 @@ export default function MusicScreen() {
 
   const loadGenre = useCallback(async (g: string, q?: typeof app.quality) => {
     setLoading(true); setGenre(g);
+    let fetched: Station[] = [];
     try {
-      const s = await popularByGenre(g, q ?? app.quality);
-      setStations(s);
+      fetched = await popularByGenre(g, q ?? app.quality);
+      setStations(fetched);
     } finally { setLoading(false); }
-    // Probe reachability AFTER clearing the loading spinner so the list
-    // appears immediately; dead stations are filtered out progressively.
+    // Probe reachability using the already-fetched list (no duplicate API
+    // call). Guard against a race where the user switches genres mid-probe
+    // by only filtering if the genre hasn't changed.
     try {
-      const current = await popularByGenre(g, q ?? app.quality);
-      const alive = await probeStations(current.slice(0, 30));
+      const alive = await probeStations(fetched.slice(0, 30));
+      if (genreRef.current !== g) return;
       const aliveUrls = new Set(alive.map((a) => a.url_resolved || a.url));
       setStations((prev) => prev.filter((p) => aliveUrls.has(p.url_resolved || p.url) || prev.indexOf(p) >= 30));
     } catch {}
