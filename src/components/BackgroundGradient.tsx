@@ -1,10 +1,16 @@
-import React from "react";
+import React, { useContext } from "react";
 import { StyleSheet, View, Image } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import { theme } from "@/theme/theme";
 import { useApp } from "@/contexts/AppContext";
 import { GlobalEffectLayer } from "@/components/GlobalEffectLayer";
+
+// Tracks whether we're already inside a BackgroundGradient — when true, the
+// nested instance suppresses its own GlobalEffectLayer so we don't run the
+// particle simulation twice when a Modal renders its own BackgroundGradient
+// over the parent screen.
+const BackgroundNestedCtx = React.createContext<boolean>(false);
 
 /**
  * App-wide wallpaper background. Renders the user's currently selected
@@ -15,19 +21,15 @@ import { GlobalEffectLayer } from "@/components/GlobalEffectLayer";
  * Falls back to a dark forest gradient when no wallpaper is set.
  */
 export const BackgroundGradient: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  let bgUri: string | undefined;
-  let showEffect = false;
-  try {
-    const app = useApp();
-    // Prefer an explicit "applied" wallpaper. If missing, fall back to the
-    // first image in the media library so users see their picked art
-    // immediately even before they hit Apply.
-    bgUri = app.currentWallpaperUri ?? app.mediaLibrary.find((m) => m.type === "image")?.uri;
-    showEffect = app.effect !== "none";
-  } catch {
-    // AppProvider not yet mounted (shouldn't happen in normal flow).
-  }
+  const isNested = useContext(BackgroundNestedCtx);
+  const app = useApp();
+  // Prefer an explicit "applied" wallpaper. If missing, fall back to the
+  // first image in the media library so users see their picked art
+  // immediately even before they hit Apply.
+  const bgUri = app.currentWallpaperUri ?? app.mediaLibrary.find((m) => m.type === "image")?.uri;
+  const showEffect = app.effect !== "none" && !isNested;
   return (
+    <BackgroundNestedCtx.Provider value={true}>
     <View style={styles.wrap}>
       {/* Base solid colour so transparent cards still have something behind. */}
       <View style={[StyleSheet.absoluteFillObject, { backgroundColor: theme.colors.bg }]} />
@@ -59,6 +61,7 @@ export const BackgroundGradient: React.FC<{ children: React.ReactNode }> = ({ ch
 
       {children}
     </View>
+    </BackgroundNestedCtx.Provider>
   );
 };
 
