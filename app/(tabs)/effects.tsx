@@ -39,11 +39,11 @@ export default function EffectsScreen() {
       <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 8, paddingBottom: 120 }]}>
         <View style={styles.header}>
           <View>
-            <Text style={styles.h1}>Visual Effects</Text>
-            <Text style={styles.hSub}>Nature Engine v2.4 • Active</Text>
+            <Text style={styles.h1}>{t("effects.title")}</Text>
+            <Text style={styles.hSub}>{t("effects.heroSubtitle")}</Text>
           </View>
           <View style={styles.badgeOk}>
-            <Text style={styles.badgeOkText}>Live</Text>
+            <Text style={styles.badgeOkText}>{t("effects.badgeLive")}</Text>
           </View>
         </View>
 
@@ -77,24 +77,24 @@ export default function EffectsScreen() {
         </GlassCard>
 
         <GlassCard>
-          <Text style={styles.cardHead}>Engine Performance</Text>
+          <Text style={styles.cardHead}>{t("effects.enginePerf")}</Text>
           <View style={[styles.row, { marginTop: 8, gap: 10 }]}>
             <Pressable onPress={() => app.setPerfMode("eco")} style={[styles.perfChip, app.perfMode === "eco" && styles.perfChipActive]}>
               <Ionicons name="flash-outline" size={16} color={app.perfMode === "eco" ? "#0b1f14" : theme.colors.accent} />
-              <Text style={[styles.perfLabel, app.perfMode === "eco" && styles.perfLabelActive]}>Eco Mode</Text>
+              <Text style={[styles.perfLabel, app.perfMode === "eco" && styles.perfLabelActive]}>{t("effects.ecoMode")}</Text>
             </Pressable>
             <Pressable onPress={() => app.setPerfMode("balanced")} style={[styles.perfChip, app.perfMode === "balanced" && styles.perfChipActive]}>
               <Ionicons name="sync-outline" size={16} color={app.perfMode === "balanced" ? "#0b1f14" : theme.colors.accent} />
-              <Text style={[styles.perfLabel, app.perfMode === "balanced" && styles.perfLabelActive]}>Balanced</Text>
+              <Text style={[styles.perfLabel, app.perfMode === "balanced" && styles.perfLabelActive]}>{t("effects.balanced")}</Text>
             </Pressable>
             <Pressable onPress={() => app.setPerfMode("high")} style={[styles.perfChip, app.perfMode === "high" && styles.perfChipActive]}>
               <Ionicons name="speedometer-outline" size={16} color={app.perfMode === "high" ? "#0b1f14" : theme.colors.accent} />
-              <Text style={[styles.perfLabel, app.perfMode === "high" && styles.perfLabelActive]}>High Perf</Text>
+              <Text style={[styles.perfLabel, app.perfMode === "high" && styles.perfLabelActive]}>{t("effects.highPerf")}</Text>
             </Pressable>
           </View>
 
           <View style={[styles.rowBetween, { marginTop: 14 }]}>
-            <Text style={styles.label}>Frame Rate (FPS)</Text>
+            <Text style={styles.label}>{t("effects.fpsLabel")}</Text>
             <Text style={styles.value}>{app.fps} FPS</Text>
           </View>
           <Slider minimumValue={10} maximumValue={60} value={app.fps} step={1}
@@ -103,7 +103,7 @@ export default function EffectsScreen() {
             onValueChange={(v) => app.setFps(Math.round(v))} />
 
           <View style={[styles.rowBetween, { marginTop: 10 }]}>
-            <Text style={styles.label}>Intensity</Text>
+            <Text style={styles.label}>{t("effects.intensity")}</Text>
             <Text style={styles.value}>{Math.round(app.intensity * 100)}%</Text>
           </View>
           <Slider minimumValue={0} maximumValue={1} value={app.intensity} step={0.01}
@@ -112,7 +112,7 @@ export default function EffectsScreen() {
             onValueChange={(v) => app.setIntensity(v)} />
 
           <View style={[styles.rowBetween, { marginTop: 10 }]}>
-            <Text style={styles.label}>Speed</Text>
+            <Text style={styles.label}>{t("effects.speed")}</Text>
             <Text style={styles.value}>{app.speed.toFixed(2)}×</Text>
           </View>
           <Slider minimumValue={0.2} maximumValue={3} value={app.speed} step={0.05}
@@ -122,9 +122,9 @@ export default function EffectsScreen() {
         </GlassCard>
 
         <View style={styles.rowBetween}>
-          <Text style={styles.cardHead}>Atmospheric Layers</Text>
+          <Text style={styles.cardHead}>{t("effects.atmosphericLayers")}</Text>
           <Pressable onPress={() => app.setEffect("none")} style={styles.resetBtn}>
-            <Text style={styles.resetText}>Reset</Text>
+            <Text style={styles.resetText}>{t("effects.reset")}</Text>
           </Pressable>
         </View>
 

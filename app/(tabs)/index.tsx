@@ -44,7 +44,7 @@ export default function HomeScreen() {
   const pickMedia = useCallback(async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert("Нужен доступ", "Разрешите приложению доступ к галерее.");
+      Alert.alert(t("common.needAccess"), t("common.needAccessGallery"));
       return;
     }
     const res = await ImagePicker.launchImageLibraryAsync({
@@ -89,7 +89,7 @@ export default function HomeScreen() {
           .filter(Boolean) as MediaItem[];
         if (items.length) {
           app.addMedia(items);
-          Alert.alert("Добавлено", `${items.length} файлов добавлены в библиотеку.`);
+          Alert.alert(t("common.added"), t("home.addedFiles", { count: items.length }));
           return;
         }
       }
@@ -98,7 +98,7 @@ export default function HomeScreen() {
     // Fallback: MediaLibrary albums (no SAF, or user cancelled)
     const perm = await MediaLibrary.requestPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert("Нужен доступ", "Разрешите приложению доступ к медиа-библиотеке.");
+      Alert.alert(t("common.needAccess"), t("common.needAccessGallery"));
       return;
     }
     setAlbumLoading(true);
@@ -127,7 +127,7 @@ export default function HomeScreen() {
       name: x.filename,
     }));
     app.addMedia(items);
-    Alert.alert("Добавлено", `${items.length} файлов из «${album.title}» добавлены в библиотеку.`);
+    Alert.alert(t("common.added"), t("home.addedFilesAlbum", { count: items.length, title: album.title }));
   }, [app]);
 
   /**
@@ -375,7 +375,7 @@ export default function HomeScreen() {
             />
           </View>
           <Text style={[styles.label, { marginTop: 10 }]}>
-            {t("home.interval")}: {app.autoChangeSec < 60 ? `${app.autoChangeSec} ${t("common.seconds")}` : `${Math.round(app.autoChangeSec / 60)} мин`}
+            {t("home.interval")}: {app.autoChangeSec < 60 ? `${app.autoChangeSec} ${t("common.seconds")}` : `${Math.round(app.autoChangeSec / 60)} ${t("common.minutes")}`}
           </Text>
           <Slider
             value={app.autoChangeSec}
@@ -394,13 +394,13 @@ export default function HomeScreen() {
               </Pressable>
             ))}
           </View>
-          <Hint text="Работает с фото; для видео используйте один ролик в библиотеке." />
+          <Hint text={t("home.autoChangeFolderHint")} />
         </GlassCard>
 
         <GlassCard>
           <Text style={styles.sectionTitle}>{t("home.setWallpaper")}</Text>
           <Text style={styles.sectionBody}>
-            Видео со звуком: {app.videoAudio ? "вкл" : "выкл"}. Радио приглушится пока видео играет.
+            {app.videoAudio ? t("home.videoAudioStateOn") : t("home.videoAudioStateOff")}
           </Text>
           <View style={[styles.row, { marginTop: 8, gap: 8 }]}>
             <PrimaryButton label={t("home.setHome")} icon="home-outline" onPress={() => app.applyLiveWallpaper("home")} style={{ flex: 1 }} />
@@ -411,14 +411,14 @@ export default function HomeScreen() {
           </View>
           <View style={[styles.row, { marginTop: 8 }]}>
             <PrimaryButton
-              label={app.videoAudio ? "Звук видео: вкл" : "Звук видео: выкл"}
+              label={app.videoAudio ? t("home.videoSoundOn") : t("home.videoSoundOff")}
               icon={app.videoAudio ? "volume-high-outline" : "volume-mute-outline"}
               variant={app.videoAudio ? "primary" : "secondary"}
               onPress={() => app.setVideoAudio(!app.videoAudio)}
               style={{ flex: 1 }}
             />
           </View>
-          <Hint text="Обои подгоняются по заполнению экрана (center-crop), а не растягиваются." />
+          <Hint text={t("home.cropHint")} />
         </GlassCard>
       </ScrollView>
 

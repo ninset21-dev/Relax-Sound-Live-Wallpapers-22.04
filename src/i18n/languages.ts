@@ -58,7 +58,15 @@ export const en: Dict = {
       openAllForWallpaper: "Use all for wallpaper",
       openAllHint: "Applies the entire selection as an auto-rotating wallpaper set.",
       multiselect: "Multi-select",
-      atmosphereEffects: "Atmosphere Effects"
+      atmosphereEffects: "Atmosphere Effects",
+      autoChangeFolderHint: "Works with photos; for videos use a single clip in the library.",
+      videoAudioStateOn: "Video audio: on. Radio will duck while the video plays.",
+      videoAudioStateOff: "Video audio: off. Radio will duck while the video plays.",
+      videoSoundOn: "Video audio: on",
+      videoSoundOff: "Video audio: off",
+      cropHint: "Wallpaper is fitted to fill the screen (center-crop), not stretched.",
+      addedFiles: "{{count}} file(s) added to the library.",
+      addedFilesAlbum: "{{count}} file(s) from \"{{title}}\" added to the library."
     },
     music: {
       title: "Audio Hub",
@@ -83,11 +91,20 @@ export const en: Dict = {
       deleteSelected: "Delete selected"
     },
     effects: {
-      title: "Effects",
+      title: "Visual Effects",
       intro: "The selected effect plays across the whole app and on the live wallpaper.",
       liveAround: "Live effect runs across the whole app and on the lock screen.",
       noneDesc: "No effect selected — pick one below to animate the entire app.",
       syncHint: "Effects stay in sync: in the app, on the home screen and on the lock screen you see the same scene.",
+      heroSubtitle: "Nature Engine v2.5 • Active",
+      badgeLive: "Live",
+      enginePerf: "Engine Performance",
+      ecoMode: "Eco Mode",
+      balanced: "Balanced",
+      highPerf: "High Perf",
+      fpsLabel: "Frame Rate (FPS)",
+      atmosphericLayers: "Atmospheric Layers",
+      reset: "Reset",
       none: "No effect",
       snow: "Snow", rain: "Rain", bubbles: "Bubbles", leaves: "Leaves",
       flowers: "Flowers", particles: "Particles", fireflies: "Fireflies",
@@ -136,9 +153,12 @@ export const en: Dict = {
     common: {
       save: "Save", cancel: "Cancel", yes: "Yes", no: "No",
       chooseAll: "Add all (multi-select files)",
-      on: "On", off: "Off", seconds: "sec",
+      on: "On", off: "Off", seconds: "sec", minutes: "min",
       delete: "Delete", confirm: "Confirm",
-      apply: "Apply", close: "Close"
+      apply: "Apply", close: "Close",
+      needAccess: "Permission required",
+      needAccessGallery: "Please grant access to your media library.",
+      added: "Added"
     }
   }
 };
@@ -174,7 +194,15 @@ export const ru: Dict = {
       openAllForWallpaper: "Использовать все для обоев",
       openAllHint: "Применит весь выбор как набор обоев с автосменой.",
       multiselect: "Мульти-выбор",
-      atmosphereEffects: "Атмосферные эффекты"
+      atmosphereEffects: "Атмосферные эффекты",
+      autoChangeFolderHint: "Работает с фото; для видео используйте один ролик в библиотеке.",
+      videoAudioStateOn: "Видео со звуком: вкл. Радио приглушится пока видео играет.",
+      videoAudioStateOff: "Видео со звуком: выкл. Радио приглушится пока видео играет.",
+      videoSoundOn: "Звук видео: вкл",
+      videoSoundOff: "Звук видео: выкл",
+      cropHint: "Обои подгоняются по заполнению экрана (center-crop), а не растягиваются.",
+      addedFiles: "{{count}} файлов добавлены в библиотеку.",
+      addedFilesAlbum: "{{count}} файлов из «{{title}}» добавлены в библиотеку."
     },
     music: {
       title: "Аудио", subtitle: "Саундскейпы и радио",
@@ -195,11 +223,20 @@ export const ru: Dict = {
       deleteSelected: "Удалить выбранное"
     },
     effects: {
-      title: "Эффекты",
+      title: "Визуальные эффекты",
       intro: "Выбранный эффект отображается по всему приложению и на живых обоях.",
       liveAround: "Эффект идёт по всему приложению и на экране блокировки.",
       noneDesc: "Эффект выключен — выберите ниже, чтобы анимировать весь экран.",
       syncHint: "Эффекты синхронизированы: в приложении, на главном экране и на экране блокировки отображается одно и то же.",
+      heroSubtitle: "Nature Engine v2.5 • Активно",
+      badgeLive: "Live",
+      enginePerf: "Производительность",
+      ecoMode: "Эконом",
+      balanced: "Баланс",
+      highPerf: "Максимум",
+      fpsLabel: "Кадры/сек (FPS)",
+      atmosphericLayers: "Слои атмосферы",
+      reset: "Сброс",
       none: "Без эффекта", snow: "Снег", rain: "Дождь", bubbles: "Пузыри",
       leaves: "Листья", flowers: "Цветы", particles: "Частицы", fireflies: "Светлячки",
       fog: "Туман", frost: "Иней", stars: "Звёзды", aurora: "Северное сияние",
@@ -241,8 +278,11 @@ export const ru: Dict = {
     },
     common: {
       save: "Сохранить", cancel: "Отмена", yes: "Да", no: "Нет",
-      chooseAll: "Добавить всё", on: "Вкл", off: "Выкл", seconds: "сек",
-      delete: "Удалить", confirm: "Подтвердить", apply: "Применить", close: "Закрыть"
+      chooseAll: "Добавить всё", on: "Вкл", off: "Выкл", seconds: "сек", minutes: "мин",
+      delete: "Удалить", confirm: "Подтвердить", apply: "Применить", close: "Закрыть",
+      needAccess: "Нужен доступ",
+      needAccessGallery: "Разрешите приложению доступ к галерее.",
+      added: "Добавлено"
     }
   }
 };
