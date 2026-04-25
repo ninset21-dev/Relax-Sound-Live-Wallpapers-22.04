@@ -35,20 +35,21 @@ export default function MusicScreen() {
 
   const loadGenre = useCallback(async (g: string, q?: typeof app.quality) => {
     setLoading(true); setGenre(g);
-    let fetched: Station[] = [];
     try {
-      fetched = await popularByGenre(g, q ?? app.quality);
+      const fetched = await popularByGenre(g, q ?? app.quality);
       setStations(fetched);
-    } finally { setLoading(false); }
-    // Probe reachability using the already-fetched list (no duplicate API
-    // call). Guard against a race where the user switches genres mid-probe
-    // by only filtering if the genre hasn't changed.
-    try {
-      const alive = await probeStations(fetched.slice(0, 30));
-      if (genreRef.current !== g) return;
-      const aliveUrls = new Set(alive.map((a) => a.url_resolved || a.url));
-      setStations((prev) => prev.filter((p) => aliveUrls.has(p.url_resolved || p.url) || prev.indexOf(p) >= 30));
-    } catch {}
+      // Probe reachability using the already-fetched list (no duplicate API
+      // call). Keep `loading` true through the probe so users see a spinner
+      // instead of stations silently disappearing seconds later.
+      try {
+        const alive = await probeStations(fetched.slice(0, 30));
+        if (genreRef.current !== g) return;
+        const aliveUrls = new Set(alive.map((a) => a.url_resolved || a.url));
+        setStations((prev) => prev.filter((p) => aliveUrls.has(p.url_resolved || p.url) || prev.indexOf(p) >= 30));
+      } catch {}
+    } finally {
+      setLoading(false);
+    }
   }, [app.quality]);
 
   useEffect(() => { loadGenre(genre); }, []);
@@ -235,8 +236,8 @@ export default function MusicScreen() {
               <Ionicons name="play" size={20} color={theme.colors.accent} />
             </Pressable>
           ))}
-          {!loading && stations.length === 0 && <Text style={styles.body}>Нет станций для «{genre}».</Text>}
-          <Hint text="Автокачество выбирает битрейт по скорости сети: WiFi/5G — высокое, 4G — среднее, 3G/2G — низкое." />
+          {!loading && stations.length === 0 && <Text style={styles.body}>{t("music.noStations", { genre })}</Text>}
+          <Hint text={t("music.qualityHint")} />
         </GlassCard>
       </ScrollView>
     </BackgroundGradient>

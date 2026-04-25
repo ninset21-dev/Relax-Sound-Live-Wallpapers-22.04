@@ -105,7 +105,7 @@ export default function HomeScreen() {
     try {
       const albums = await MediaLibrary.getAlbumsAsync({ includeSmartAlbums: true });
       if (!albums.length) {
-        Alert.alert("Папки не найдены", "Нет доступных альбомов в медиа-библиотеке.");
+        Alert.alert(t("home.noFolders"), t("home.noFoldersBody"));
         return;
       }
       setAlbumList(albums);
@@ -137,7 +137,7 @@ export default function HomeScreen() {
    * time the wallpaper redraws, which breaks lock-screen use).
    */
   const importSelectedGP = useCallback(async () => {
-    if (!gpSelected.size) return Alert.alert("Google Photos", "Ничего не выбрано.");
+    if (!gpSelected.size) return Alert.alert("Google Photos", t("home.gpEmptySelection"));
     const dir = FileSystem.cacheDirectory + "gp/";
     try {
       await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
@@ -165,9 +165,9 @@ export default function HomeScreen() {
     if (downloaded.length) {
       app.addMedia(downloaded);
       setGpSelected(new Set());
-      Alert.alert("Google Photos", `Импортировано ${downloaded.length}.`);
+      Alert.alert("Google Photos", t("home.gpImported", { count: downloaded.length }));
     } else {
-      Alert.alert("Google Photos", "Не удалось скачать.");
+      Alert.alert("Google Photos", t("home.gpDownloadFailed"));
     }
   }, [gpSelected, app]);
 
@@ -189,10 +189,10 @@ export default function HomeScreen() {
 
   const deleteSelectedLib = () => {
     if (!libSelected.size) return;
-    Alert.alert("Удалить", `Удалить выбранные файлы (${libSelected.size}) из библиотеки?`, [
-      { text: "Отмена", style: "cancel" },
+    Alert.alert(t("home.deleteFromLibTitle"), t("home.deleteFromLibMany", { count: libSelected.size }), [
+      { text: t("common.cancel"), style: "cancel" },
       {
-        text: "Удалить",
+        text: t("common.delete"),
         style: "destructive",
         onPress: () => {
           app.removeMediaMany(Array.from(libSelected));
@@ -319,9 +319,9 @@ export default function HomeScreen() {
                         style={styles.xBtn}
                         hitSlop={8}
                         onPress={() =>
-                          Alert.alert("Удалить", "Удалить файл из библиотеки?", [
-                            { text: "Отмена", style: "cancel" },
-                            { text: "Удалить", style: "destructive", onPress: () => app.removeMedia(m.uri) },
+                          Alert.alert(t("home.deleteFromLibTitle"), t("home.deleteFromLibOne"), [
+                            { text: t("common.cancel"), style: "cancel" },
+                            { text: t("common.delete"), style: "destructive", onPress: () => app.removeMedia(m.uri) },
                           ])
                         }
                       >

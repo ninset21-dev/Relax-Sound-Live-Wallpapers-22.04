@@ -66,7 +66,15 @@ export const en: Dict = {
       videoSoundOff: "Video audio: off",
       cropHint: "Wallpaper is fitted to fill the screen (center-crop), not stretched.",
       addedFiles: "{{count}} file(s) added to the library.",
-      addedFilesAlbum: "{{count}} file(s) from \"{{title}}\" added to the library."
+      addedFilesAlbum: "{{count}} file(s) from \"{{title}}\" added to the library.",
+      noFolders: "No folders found",
+      noFoldersBody: "There are no available albums in the media library.",
+      gpEmptySelection: "Nothing selected.",
+      gpImported: "Imported {{count}}.",
+      gpDownloadFailed: "Could not download.",
+      deleteFromLibTitle: "Delete",
+      deleteFromLibMany: "Delete the selected files ({{count}}) from the library?",
+      deleteFromLibOne: "Delete this file from the library?"
     },
     music: {
       title: "Audio Hub",
@@ -88,7 +96,9 @@ export const en: Dict = {
       repeatOff: "Repeat: off", repeatAll: "Repeat all", repeatOne: "Repeat one",
       localExplorer: "Local Explorer",
       selectAll: "Select all",
-      deleteSelected: "Delete selected"
+      deleteSelected: "Delete selected",
+      noStations: "No stations for \"{{genre}}\".",
+      qualityHint: "Auto picks bitrate based on connection: WiFi/5G — high, 4G — medium, 3G/2G — low."
     },
     effects: {
       title: "Visual Effects",
@@ -202,7 +212,15 @@ export const ru: Dict = {
       videoSoundOff: "Звук видео: выкл",
       cropHint: "Обои подгоняются по заполнению экрана (center-crop), а не растягиваются.",
       addedFiles: "{{count}} файлов добавлены в библиотеку.",
-      addedFilesAlbum: "{{count}} файлов из «{{title}}» добавлены в библиотеку."
+      addedFilesAlbum: "{{count}} файлов из «{{title}}» добавлены в библиотеку.",
+      noFolders: "Папки не найдены",
+      noFoldersBody: "Нет доступных альбомов в медиа-библиотеке.",
+      gpEmptySelection: "Ничего не выбрано.",
+      gpImported: "Импортировано {{count}}.",
+      gpDownloadFailed: "Не удалось скачать.",
+      deleteFromLibTitle: "Удалить",
+      deleteFromLibMany: "Удалить выбранные файлы ({{count}}) из библиотеки?",
+      deleteFromLibOne: "Удалить файл из библиотеки?"
     },
     music: {
       title: "Аудио", subtitle: "Саундскейпы и радио",
@@ -220,7 +238,9 @@ export const ru: Dict = {
       repeatOff: "Повтор: выкл", repeatAll: "Повтор всего", repeatOne: "Повтор трека",
       localExplorer: "Локальные файлы",
       selectAll: "Выбрать всё",
-      deleteSelected: "Удалить выбранное"
+      deleteSelected: "Удалить выбранное",
+      noStations: "Нет станций для «{{genre}}».",
+      qualityHint: "Автокачество выбирает битрейт по скорости сети: WiFi/5G — высокое, 4G — среднее, 3G/2G — низкое."
     },
     effects: {
       title: "Визуальные эффекты",
