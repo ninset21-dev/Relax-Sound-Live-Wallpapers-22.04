@@ -59,8 +59,8 @@ class RelaxWallpaperModule(reactContext: ReactApplicationContext) :
      * wallpaper service — which runs in a separate window-manager context —
      * can always read it. Without this, content URIs from MediaLibrary or
      * DocumentPicker frequently come back as "Permission Denial" inside the
-     * wallpaper engine (req #5 — "video wallpaper not installing"). Returns
-     * the absolute file path on success or `null` to fall back to the
+     * wallpaper engine (req #5 -- "video wallpaper not installing"). Returns
+     * the absolute file path on success or null to fall back to the
      * original URI.
      */
     private fun materializeVideo(srcUri: String): String? {
