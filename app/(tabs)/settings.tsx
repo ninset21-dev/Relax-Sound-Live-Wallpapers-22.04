@@ -75,18 +75,6 @@ export default function SettingsScreen() {
         </GlassCard>
 
         <GlassCard>
-          <Text style={styles.sectionTitle}>{t("settings.perfMode")}</Text>
-          <View style={[styles.row, { marginTop: 6, gap: 8 }]}>
-            <PrimaryButton label={t("settings.perfBalanced")} variant={app.perfMode === "balanced" ? "primary" : "secondary"}
-              onPress={() => app.setPerfMode("balanced")} style={{ flex: 1 }} />
-            <PrimaryButton label={t("settings.perfHigh")} variant={app.perfMode === "high" ? "primary" : "secondary"}
-              onPress={() => app.setPerfMode("high")} style={{ flex: 1 }} />
-            <PrimaryButton label={t("settings.perfEco")} variant={app.perfMode === "eco" ? "primary" : "secondary"}
-              onPress={() => app.setPerfMode("eco")} style={{ flex: 1 }} />
-          </View>
-        </GlassCard>
-
-        <GlassCard>
           <Text style={styles.sectionTitle}>{t("settings.uiOpacity")}</Text>
           <Text style={styles.body}>{t("settings.uiOpacityHint")}</Text>
           <Text style={[styles.body, { marginTop: 6 }]}>{Math.round(app.uiOpacity * 100)}%</Text>

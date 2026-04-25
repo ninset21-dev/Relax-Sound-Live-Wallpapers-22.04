@@ -66,7 +66,8 @@ class RelaxWallpaperModule(reactContext: ReactApplicationContext) :
     private fun materializeVideo(srcUri: String): String? {
         return try {
             val ctx = reactApplicationContext
-            if (srcUri.startsWith("file://") || srcUri.startsWith("/")) return srcUri
+            if (srcUri.startsWith("file://")) return srcUri
+            if (srcUri.startsWith("/")) return "file://" + srcUri
             // Use a hash-suffixed filename so applying a *different* video
             // produces a different file path — the wallpaper engine caches
             // by URI string, so reusing the same path would let the old
@@ -76,13 +77,27 @@ class RelaxWallpaperModule(reactContext: ReactApplicationContext) :
             val hash = Integer.toHexString(srcUri.hashCode())
             val dest = File(ctx.filesDir, "wallpaper_video_$hash.mp4")
             dest.parentFile?.mkdirs()
-            if (!dest.exists() || dest.length() == 0L) {
-                val input = ctx.contentResolver.openInputStream(Uri.parse(srcUri)) ?: return null
+            // Always re-copy when the cached file is empty, missing or
+            // implausibly small (<8 KB — anything that can't even hold a
+            // valid mp4 atom). This catches partial copies left by an
+            // earlier crash.
+            if (!dest.exists() || dest.length() < 8 * 1024L) {
+                val input = ctx.contentResolver.openInputStream(Uri.parse(srcUri))
+                    ?: run {
+                        android.util.Log.e("RelaxWP", "openInputStream failed for $srcUri")
+                        return null
+                    }
                 input.use { i -> dest.outputStream().use { o -> i.copyTo(o) } }
             }
-            if (!dest.exists() || dest.length() == 0L) return null
+            if (!dest.exists() || dest.length() == 0L) {
+                android.util.Log.e("RelaxWP", "materialized video is empty for $srcUri")
+                return null
+            }
             "file://" + dest.absolutePath
-        } catch (_: Throwable) { null }
+        } catch (t: Throwable) {
+            android.util.Log.e("RelaxWP", "materializeVideo failed", t)
+            null
+        }
     }
 
     private fun materializeImage(srcUri: String): String? {
@@ -112,9 +127,18 @@ class RelaxWallpaperModule(reactContext: ReactApplicationContext) :
             val fps = if (params.hasKey("fps")) params.getInt("fps") else 30
             val videoAudio = if (params.hasKey("videoAudio")) params.getBoolean("videoAudio") else false
             // Materialize content:// URIs to app-private file paths so the
-            // wallpaper service can always read them.
-            val video = rawVideo?.takeIf { it.isNotBlank() }?.let { materializeVideo(it) ?: it }
-            val image = rawImage?.takeIf { it.isNotBlank() }?.let { materializeImage(it) ?: it }
+            // wallpaper service can always read them. If materialize fails
+            // we still pass the source URI through — it may be a usable
+            // file:// path. The engine logs an error if it can't open it.
+            val video = rawVideo?.takeIf { it.isNotBlank() }?.let { src ->
+                materializeVideo(src) ?: run {
+                    android.util.Log.w("RelaxWP", "video materialize fell back to source: $src")
+                    src
+                }
+            }
+            val image = rawImage?.takeIf { it.isNotBlank() }?.let { src ->
+                materializeImage(src) ?: src
+            }
             prefs.edit()
                 .putString("wallpaper_video_uri", video)
                 .putString("wallpaper_image_uri", image)

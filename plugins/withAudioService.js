@@ -227,9 +227,7 @@ class RelaxAudioService : Service() {
 
     /**
      * Apply the standard audio attributes, persisted repeat mode, and
-     * isPlaying/error listeners to a freshly built ExoPlayer. Used by both
-     * ensurePlayer() and crossfadeTo() so a player promoted after a
-     * crossfade has the same focus/state behaviour as the original.
+     * isPlaying/error listeners to a freshly built ExoPlayer.
      */
     private fun configurePlayer(p: ExoPlayer) {
         val repeat = getSharedPreferences("relax_audio", MODE_PRIVATE)
@@ -262,31 +260,22 @@ class RelaxAudioService : Service() {
 
     private fun play(url: String, gapless: Boolean = false) {
         if (!requestFocus()) return
-        // Gapless / crossfade path: keep the current player playing the old
-        // station while a SECOND ExoPlayer buffers the new URL. Once the new
-        // player reaches STATE_READY we crossfade volumes (~400 ms) and
-        // release the old player. The user perceives one continuous stream.
-        if (gapless && player?.isPlaying == true) {
-            crossfadeTo(url)
-            getSharedPreferences("relax_audio", MODE_PRIVATE).edit()
-                .putBoolean("was_playing", true)
-                .putString("last_url", url)
-                .putString("last_title", currentTitle)
-                .apply()
-            startForeground(NOTIF_ID, buildNotification())
-            return
-        }
+        // Single-player gapless: stop the current stream, swap MediaItem
+        // and prepare on the SAME ExoPlayer instance. Followed by a fast
+        // 200 ms fade-in (vs the cold-start 2.5s ramp) so the user does
+        // not perceive a noticeable pause between stations. The previous
+        // dual-player crossfade caused two streams to overlap whenever
+        // the user tapped a new station mid-fade — single player
+        // eliminates that whole class of bugs.
         ensurePlayer()
-        val startVol = 0f
-        player?.apply {
-            stop()
-            clearMediaItems()
-            setMediaItem(MediaItem.fromUri(Uri.parse(url)))
-            prepare()
-            volume = startVol
-            playWhenReady = true
-        }
-        fadeInVolume(quick = false)
+        val p = player ?: return
+        try { p.stop() } catch (_: Throwable) {}
+        try { p.clearMediaItems() } catch (_: Throwable) {}
+        p.setMediaItem(MediaItem.fromUri(Uri.parse(url)))
+        p.prepare()
+        p.volume = 0f
+        p.playWhenReady = true
+        fadeInVolume(quick = gapless)
         // Persist the last URL so fadeInAndResume() can restore playback even
         // after the service was killed and the player lost its media item.
         getSharedPreferences("relax_audio", MODE_PRIVATE).edit()
@@ -295,73 +284,6 @@ class RelaxAudioService : Service() {
             .putString("last_title", currentTitle)
             .apply()
         startForeground(NOTIF_ID, buildNotification())
-    }
-
-    /**
-     * Build a second ExoPlayer that buffers the new url silently while the main
-     * player keeps the existing station audible. Once the new player is
-     * READY, fade the two volumes in opposite directions and release the
-     * old player. Removes the audible "pause" the user reported when
-     * tapping a different radio station while one was already playing.
-     */
-    private var swapPlayer: ExoPlayer? = null
-    private var swapListener: Player.Listener? = null
-
-    private fun crossfadeTo(url: String) {
-        // If a previous crossfade is still in flight, drop it cleanly first
-        // — otherwise we'd leak a buffered ExoPlayer.
-        swapListener?.let { l -> swapPlayer?.removeListener(l) }
-        swapPlayer?.let { try { it.release() } catch (_: Throwable) {} }
-
-        val sp = ExoPlayer.Builder(this).build()
-        configurePlayer(sp)
-        sp.volume = 0f
-        sp.setMediaItem(MediaItem.fromUri(Uri.parse(url)))
-        sp.prepare()
-        sp.playWhenReady = true
-
-        val listenerRef = arrayOfNulls<Player.Listener>(1)
-        val listener = object : Player.Listener {
-            override fun onPlaybackStateChanged(state: Int) {
-                if (state != Player.STATE_READY) return
-                // Already moved to crossfade — guard against another READY
-                // event firing twice.
-                listenerRef[0]?.let { sp.removeListener(it) }
-                fadeRunner?.let { handler.removeCallbacks(it) }
-                val oldP = player
-                val newP = sp
-                val cap = if (ducked) targetVolume * 0.2f else targetVolume
-                val steps = 12
-                val totalMs = 400L
-                val stepDelay = (totalMs / steps).coerceAtLeast(15L)
-                var i = 0
-                val runner = object : Runnable {
-                    override fun run() {
-                        i++
-                        val frac = i.toFloat() / steps
-                        try { oldP?.volume = (cap * (1f - frac)).coerceIn(0f, 1f) } catch (_: Throwable) {}
-                        try { newP.volume = (cap * frac).coerceIn(0f, 1f) } catch (_: Throwable) {}
-                        if (i < steps) {
-                            handler.postDelayed(this, stepDelay)
-                        } else {
-                            // Promote new to main, release old.
-                            try { oldP?.release() } catch (_: Throwable) {}
-                            player = newP
-                            swapPlayer = null
-                            swapListener = null
-                            fadeRunner = null
-                            broadcastState()
-                        }
-                    }
-                }
-                fadeRunner = runner
-                handler.post(runner)
-            }
-        }
-        listenerRef[0] = listener
-        swapListener = listener
-        sp.addListener(listener)
-        swapPlayer = sp
     }
 
     private fun togglePlayPause() {

@@ -184,7 +184,7 @@ class RelaxWallpaperService : WallpaperService() {
                 // (locking the canvas on a surface attached to MediaPlayer would
                 // throw IllegalStateException / clobber video frames).
                 if (mediaPlayer == null) drawFrame()
-                val fps = prefs.getInt("effect_fps", 30).coerceIn(10, 60)
+                val fps = prefs.getInt("effect_fps", 30).coerceIn(10, 120)
                 handler.postDelayed(this, 1000L / fps)
             }
         }

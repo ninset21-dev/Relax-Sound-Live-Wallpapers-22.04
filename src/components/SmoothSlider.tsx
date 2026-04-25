@@ -7,48 +7,50 @@ import type { SliderProps } from "@react-native-community/slider";
  * "thumb fights the finger" jitter the user reported when dragging volume,
  * opacity and effect sliders.
  *
- * Root cause: setting `value` on every onValueChange re-render makes the
- * native slider reset its visual thumb position back to the prop, causing
- * the thumb to jump while the finger is still moving.
- *
- * Fix: track an internal `localValue` that the native slider never
- * "controls", and only push the external value into the slider when it
- * actually changes (e.g. someone else updated it programmatically). During
- * a drag, the parent state updates do NOT touch the slider's controlled
- * value, so the thumb stays under the finger.
+ * Root cause: @react-native-community/slider resets the thumb to the
+ * prop's `value` whenever it changes — including from re-renders inside
+ * onValueChange. We work around that by:
+ *   1. Treating the slider as uncontrolled (pass `value` only on mount
+ *      via React `key` so external programmatic updates remount the
+ *      slider).
+ *   2. Only forwarding the dragged value to the parent on
+ *      `onSlidingComplete`, so the parent never re-renders the slider
+ *      mid-drag.
+ *   3. Still emitting `onValueChange` for callers that want a live
+ *      label, but never re-rendering the parent's slider in response.
  */
 type Props = Omit<SliderProps, "value"> & {
   value: number;
-  /** Called continuously while dragging — for live preview / label. */
   onValueChange?: (v: number) => void;
-  /** Called once when the user lifts their finger — for committing state. */
   onSlidingComplete?: (v: number) => void;
 };
 
 export const SmoothSlider: React.FC<Props> = ({ value, onValueChange, onSlidingComplete, ...rest }) => {
-  // The "displayed" value: starts at parent prop, updates as the user drags
-  // and when the parent prop changes from outside (e.g. native broadcast).
-  const [internal, setInternal] = useState(value);
+  // Bump `key` whenever the external value diverges from what we last
+  // knew about, but ONLY while the user isn't dragging. This remounts
+  // the underlying slider so the thumb snaps to the new external value.
+  const [mountKey, setMountKey] = useState(0);
   const draggingRef = useRef(false);
+  const lastSeenExternal = useRef(value);
 
-  // Sync external prop changes into the slider only when we're NOT
-  // dragging, so the thumb never jumps mid-gesture.
   useEffect(() => {
-    if (!draggingRef.current) setInternal(value);
+    if (draggingRef.current) return;
+    if (Math.abs(value - lastSeenExternal.current) > 1e-6) {
+      lastSeenExternal.current = value;
+      setMountKey((k) => k + 1);
+    }
   }, [value]);
 
   return (
     <Slider
       {...rest}
-      value={internal}
+      key={mountKey}
+      value={value}
       onSlidingStart={() => { draggingRef.current = true; }}
-      onValueChange={(v) => {
-        setInternal(v);
-        onValueChange?.(v);
-      }}
+      onValueChange={(v) => { onValueChange?.(v); }}
       onSlidingComplete={(v) => {
         draggingRef.current = false;
-        setInternal(v);
+        lastSeenExternal.current = v;
         onSlidingComplete?.(v);
       }}
     />

@@ -66,7 +66,7 @@ export default function EffectsScreen() {
             <Text style={styles.label}>{t("effects.fpsLabel")}</Text>
             <Text style={styles.value}>{app.fps} FPS</Text>
           </View>
-          <SmoothSlider minimumValue={10} maximumValue={60} value={app.fps} step={1}
+          <SmoothSlider minimumValue={10} maximumValue={120} value={app.fps} step={1}
             minimumTrackTintColor={theme.colors.accent} maximumTrackTintColor={theme.colors.border}
             thumbTintColor={theme.colors.accent}
             onSlidingComplete={(v) => app.setFps(Math.round(v))} />

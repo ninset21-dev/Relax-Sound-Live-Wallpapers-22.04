@@ -140,27 +140,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try { const active = await Wallpaper.isLiveWallpaperActive(); persist({ liveWallpaperActive: !!active }); } catch {}
       try { const a11y = await Accessibility.isEnabled(); persist({ a11yEnabled: !!a11y }); } catch {}
 
-      // First-launch autoplay (req #8): if the user has never played
-      // anything, start "Nature Radio Rain" automatically once Radio
-      // Browser returns a working stream. Subsequent launches honor the
-      // user's last selection / paused state.
+      // First-launch autoplay (req #8): start a "Nature Radio Rain"
+      // stream automatically the first time the app opens. We try Radio
+      // Browser first (preferred — names + bitrates), then fall back to
+      // a hardcoded public ambient-rain stream so autoplay works even
+      // if Radio Browser is unreachable on the device's first launch.
       try {
         const seen = await AsyncStorage.getItem("relax_first_run_done");
         if (!seen) {
           await AsyncStorage.setItem("relax_first_run_done", "1");
-          const { searchStations } = require("@/services/radio");
-          const candidates: any[] = await searchStations({ name: "Nature Radio Rain", limit: 8 });
-          const fallback: any[] = candidates.length
-            ? candidates
-            : await searchStations({ tag: "rain", limit: 8 });
-          const pick = fallback.find((s: any) => s.url_resolved || s.url);
-          if (pick) {
-            const url = pick.url_resolved || pick.url;
-            const title = (pick.name || "Nature Radio Rain").toString().trim();
-            try { Audio.setPlaylist?.([{ uri: url, title }], 0); } catch {}
-            try { Audio.play(url, title); } catch {}
-            setState((p) => ({ ...p, currentTrack: { uri: url, title } }));
+          let url: string | null = null;
+          let title = "Nature Radio Rain";
+          try {
+            const { searchStations } = require("@/services/radio");
+            const candidates: any[] = await searchStations({ name: "Nature Radio Rain", limit: 8 });
+            const fallback: any[] = candidates.length
+              ? candidates
+              : await searchStations({ tag: "rain", limit: 8 });
+            const pick = fallback.find((s: any) => s.url_resolved || s.url);
+            if (pick) {
+              url = pick.url_resolved || pick.url || null;
+              title = (pick.name || "Nature Radio Rain").toString().trim();
+            }
+          } catch {}
+          if (!url) {
+            // Hardcoded public ambient-rain stream as last-resort fallback.
+            // Sleep Radio (radio.sleepradio.org / sleepradio.com) — used
+            // here only because Radio Browser was unreachable on first run.
+            url = "https://stream.zenolive.com/76hsw3ru0eruv";
           }
+          try { Audio.setPlaylist?.([{ uri: url, title }], 0); } catch {}
+          try { Audio.play(url, title); } catch {}
+          setState((p) => ({ ...p, currentTrack: { uri: url!, title } }));
         }
       } catch {}
     })();

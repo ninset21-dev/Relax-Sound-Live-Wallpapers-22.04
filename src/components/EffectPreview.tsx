@@ -21,7 +21,8 @@ export const EffectPreview: React.FC<{
   width?: number;
   height?: number;
   transparent?: boolean;
-}> = ({ effect, intensity, speed, width, height, transparent }) => {
+  fps?: number;
+}> = ({ effect, intensity, speed, width, height, transparent, fps }) => {
   const screen = Dimensions.get("window");
   const W = width ?? Math.min(screen.width - 32, 700);
   const H = height ?? 360;
@@ -44,6 +45,9 @@ export const EffectPreview: React.FC<{
     let raf: number;
     let lastTs = 0;
     let worldT = 0;
+    // Throttle to the user's chosen FPS (respect slider 10-120). When fps
+    // is undefined we fall back to free-running rAF (display refresh).
+    const minFrameMs = fps ? Math.max(1000 / 120, 1000 / Math.max(10, Math.min(120, fps))) : 0;
     const gravityFor = (e: EffectKind): number =>
       e === "rain" ? 28
       : e === "snow" ? 4
@@ -52,6 +56,11 @@ export const EffectPreview: React.FC<{
       : 0;
     const loop = (ts: number) => {
       if (!mounted) return;
+      // Skip frames that arrive faster than the configured FPS budget.
+      if (minFrameMs > 0 && lastTs && ts - lastTs < minFrameMs) {
+        raf = requestAnimationFrame(loop);
+        return;
+      }
       const p = particlesRef.current;
       while (p.length < targetCount) p.push(spawn(effect, W, H));
       // Frame-rate independent stepping — actual elapsed delta keeps
@@ -85,7 +94,7 @@ export const EffectPreview: React.FC<{
       mounted = false;
       cancelAnimationFrame(raf);
     };
-  }, [effect, speed, W, H, targetCount]);
+  }, [effect, speed, W, H, targetCount, fps]);
 
   return (
     <View style={[styles.wrap, { width: W, height: H, backgroundColor: transparent ? "transparent" : "#0b1f14" }]}>

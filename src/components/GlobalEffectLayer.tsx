@@ -22,6 +22,7 @@ export const GlobalEffectLayer: React.FC = () => {
         effect={app.effect}
         intensity={app.intensity}
         speed={app.speed}
+        fps={app.fps}
         width={width}
         height={height}
         transparent
