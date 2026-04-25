@@ -9,14 +9,15 @@ import { useApp } from "@/contexts/AppContext";
 export const GlassCard: React.FC<{ children: React.ReactNode; style?: ViewStyle; padding?: number }> = ({
   children, style, padding = 16
 }) => {
-  // uiOpacity is only applied to the card background — content stays fully
-  // legible so the slider acts as a background transparency dial.
-  let bgOpacity = 1;
-  try { bgOpacity = useApp().uiOpacity; } catch {}
+  // uiOpacity controls the visual transparency of the card as a whole so
+  // the slider has an obvious effect. Below 0.05 the card disappears
+  // entirely (req #3 — slider must visibly affect the UI from 0 to 100%).
+  let cardOpacity = 1;
+  try { cardOpacity = useApp().uiOpacity; } catch {}
   return (
-    <View style={[styles.wrap, style]}>
-      <BlurView intensity={40 * bgOpacity} tint="dark" style={StyleSheet.absoluteFill} />
-      <View style={[styles.bg, { opacity: bgOpacity }]} />
+    <View style={[styles.wrap, style, { opacity: cardOpacity }]}>
+      <BlurView intensity={Math.max(10, 40 * cardOpacity)} tint="dark" style={StyleSheet.absoluteFill} />
+      <View style={styles.bg} />
       <View style={[styles.inner, { padding }]}>{children}</View>
     </View>
   );

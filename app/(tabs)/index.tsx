@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { ScrollView, Text, StyleSheet, View, Pressable, Image, Alert, Modal, FlatList, Dimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import Slider from "@react-native-community/slider";
 import { useTranslation } from "react-i18next";
 import * as ImagePicker from "expo-image-picker";
 import * as MediaLibrary from "expo-media-library";
@@ -10,7 +9,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BackgroundGradient } from "@/components/BackgroundGradient";
 import { GlassCard } from "@/components/GlassCard";
 import { PrimaryButton } from "@/components/PrimaryButton";
-import { Hint } from "@/components/Hint";
 import { theme } from "@/theme/theme";
 import { useApp, MediaItem } from "@/contexts/AppContext";
 import { fetchGooglePhotosAlbum, GPhoto } from "@/services/googlePhotos";
@@ -211,32 +209,7 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.brand}>
-          <View>
-            <Text style={styles.brandH1}>NINSET</Text>
-            <Text style={styles.brandSub}>Nature Engine v2.5</Text>
-          </View>
-          <View style={styles.brandIcon}>
-            <Ionicons name="leaf" size={22} color={theme.colors.accent} />
-          </View>
-        </View>
-
-        <View style={styles.statRow}>
-          <GlassCard padding={12} style={{ flex: 1, marginRight: 4 }}>
-            <View style={styles.statItem}>
-              <Ionicons name="water-outline" size={18} color={theme.colors.accent} />
-              <Text style={styles.statLabel}>FLUIDITY</Text>
-            </View>
-            <Text style={styles.statValue}>{app.fps} FPS</Text>
-          </GlassCard>
-          <GlassCard padding={12} style={{ flex: 1, marginLeft: 4 }}>
-            <View style={styles.statItem}>
-              <Ionicons name="flash-outline" size={18} color={theme.colors.accent} />
-              <Text style={styles.statLabel}>POWER</Text>
-            </View>
-            <Text style={styles.statValue}>
-              {app.perfMode === "eco" ? "ECO-MODE" : app.perfMode === "high" ? "HIGH" : "BALANCED"}
-            </Text>
-          </GlassCard>
+          <Text style={styles.brandH1}>{t("app.name")}</Text>
         </View>
 
         <GlassCard>
@@ -248,6 +221,71 @@ export default function HomeScreen() {
           <View style={[styles.row, { marginTop: 8 }]}>
             <PrimaryButton label={t("home.pickFolder")} icon="folder-outline" variant="secondary" onPress={pickFolder} style={{ flex: 1 }} />
           </View>
+
+          {/* Compact wallpaper set + target picker + auto-change.
+              All controls embedded so the home screen fits without
+              scroll (req #10/#11/#12). */}
+          {app.mediaLibrary.length > 0 && (
+            <View style={{ marginTop: 12, gap: 6 }}>
+              <Text style={styles.subHeader}>{t("home.setWallpaper")}</Text>
+              <View style={[styles.row, { flexWrap: "wrap", gap: 6, marginTop: 4 }]}>
+                {(["home", "lock", "both"] as const).map((t2) => (
+                  <Pressable key={t2} onPress={() => app.setWallpaperTarget(t2)} style={[styles.chip, app.wallpaperTarget === t2 && styles.chipActive]}>
+                    <Ionicons
+                      name={t2 === "home" ? "home-outline" : t2 === "lock" ? "lock-closed-outline" : "phone-portrait-outline"}
+                      size={13}
+                      color={app.wallpaperTarget === t2 ? "#0b1f14" : theme.colors.accent}
+                    />
+                    <Text style={[styles.chipText, app.wallpaperTarget === t2 && styles.chipTextActive]}>
+                      {t2 === "home" ? t("home.targetHome") : t2 === "lock" ? t("home.targetLock") : t("home.targetBoth")}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <View style={[styles.row, { gap: 6, marginTop: 6 }]}>
+                <PrimaryButton
+                  label={t("home.applyWallpaper")}
+                  icon="sparkles-outline"
+                  onPress={() => app.applyLiveWallpaper(app.wallpaperTarget)}
+                  style={{ flex: 1 }}
+                />
+                <PrimaryButton
+                  label={app.videoAudio ? t("home.videoSoundOnShort") : t("home.videoSoundOffShort")}
+                  icon={app.videoAudio ? "volume-high-outline" : "volume-mute-outline"}
+                  variant={app.videoAudio ? "primary" : "secondary"}
+                  onPress={() => app.setVideoAudio(!app.videoAudio)}
+                  style={{ flex: 1 }}
+                />
+              </View>
+              {/* Compact auto-change: toggle + interval chips inline. */}
+              <View style={[styles.rowBetween, { marginTop: 8 }]}>
+                <Text style={styles.subHeader}>{t("home.autoChange")}</Text>
+                <Pressable
+                  onPress={() => app.setAutoChangeEnabled(!app.autoChangeEnabled)}
+                  style={[styles.smallToggle, app.autoChangeEnabled && styles.smallToggleOn]}
+                >
+                  <Ionicons name={app.autoChangeEnabled ? "toggle" : "toggle-outline"} size={14} color={app.autoChangeEnabled ? "#0b1f14" : theme.colors.accent} />
+                  <Text style={[styles.smallToggleText, app.autoChangeEnabled && styles.smallToggleTextOn]}>
+                    {app.autoChangeEnabled ? t("common.on") : t("common.off")}
+                  </Text>
+                </Pressable>
+              </View>
+              {app.autoChangeEnabled && (
+                <>
+                  <Text style={[styles.label, { marginTop: 2 }]}>
+                    {t("home.interval")}: {app.autoChangeSec < 60 ? `${app.autoChangeSec} ${t("common.seconds")}` : `${Math.round(app.autoChangeSec / 60)} ${t("common.minutes")}`}
+                  </Text>
+                  <View style={[styles.row, { flexWrap: "wrap" }]}>
+                    {intervalPreset.map((s) => (
+                      <Pressable key={s} onPress={() => app.setAutoChangeSec(s)} style={[styles.chip, app.autoChangeSec === s && styles.chipActive]}>
+                        <Text style={[styles.chipText, app.autoChangeSec === s && styles.chipTextActive]}>{s < 60 ? `${s}s` : s < 3600 ? `${Math.round(s / 60)}m` : `${Math.round(s / 3600)}h`}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </>
+              )}
+            </View>
+          )}
 
           {app.mediaLibrary.length > 0 && (
             <>
@@ -358,64 +396,6 @@ export default function HomeScreen() {
           </View>
         </GlassCard>
 
-        <GlassCard>
-          <Text style={styles.sectionTitle}>{t("home.autoChange")}</Text>
-          <Text style={styles.sectionBody}>{t("home.autoChangeHint")}</Text>
-          <View style={[styles.row, { marginTop: 6 }]}>
-            <PrimaryButton
-              label={app.autoChangeEnabled ? t("common.on") : t("common.off")}
-              icon={app.autoChangeEnabled ? "toggle" : "toggle-outline"}
-              variant={app.autoChangeEnabled ? "primary" : "secondary"}
-              onPress={() => app.setAutoChangeEnabled(!app.autoChangeEnabled)}
-              style={{ flex: 1 }}
-            />
-          </View>
-          <Text style={[styles.label, { marginTop: 10 }]}>
-            {t("home.interval")}: {app.autoChangeSec < 60 ? `${app.autoChangeSec} ${t("common.seconds")}` : `${Math.round(app.autoChangeSec / 60)} ${t("common.minutes")}`}
-          </Text>
-          <Slider
-            value={app.autoChangeSec}
-            minimumValue={10}
-            maximumValue={3600}
-            step={10}
-            minimumTrackTintColor={theme.colors.accent}
-            maximumTrackTintColor={theme.colors.border}
-            thumbTintColor={theme.colors.accent}
-            onValueChange={(v) => app.setAutoChangeSec(Math.round(v))}
-          />
-          <View style={[styles.row, { flexWrap: "wrap" }]}>
-            {intervalPreset.map((s) => (
-              <Pressable key={s} onPress={() => app.setAutoChangeSec(s)} style={styles.chip}>
-                <Text style={styles.chipText}>{s < 60 ? `${s}s` : s < 3600 ? `${Math.round(s / 60)}m` : `${Math.round(s / 3600)}h`}</Text>
-              </Pressable>
-            ))}
-          </View>
-          <Hint text={t("home.autoChangeFolderHint")} />
-        </GlassCard>
-
-        <GlassCard>
-          <Text style={styles.sectionTitle}>{t("home.setWallpaper")}</Text>
-          <Text style={styles.sectionBody}>
-            {app.videoAudio ? t("home.videoAudioStateOn") : t("home.videoAudioStateOff")}
-          </Text>
-          <View style={[styles.row, { marginTop: 8, gap: 8 }]}>
-            <PrimaryButton label={t("home.setHome")} icon="home-outline" onPress={() => app.applyLiveWallpaper("home")} style={{ flex: 1 }} />
-            <PrimaryButton label={t("home.setLock")} icon="lock-closed-outline" variant="secondary" onPress={() => app.applyLiveWallpaper("lock")} style={{ flex: 1 }} />
-          </View>
-          <View style={[styles.row, { marginTop: 8 }]}>
-            <PrimaryButton label={t("home.setBoth")} icon="phone-portrait-outline" variant="secondary" onPress={() => app.applyLiveWallpaper("both")} style={{ flex: 1 }} />
-          </View>
-          <View style={[styles.row, { marginTop: 8 }]}>
-            <PrimaryButton
-              label={app.videoAudio ? t("home.videoSoundOn") : t("home.videoSoundOff")}
-              icon={app.videoAudio ? "volume-high-outline" : "volume-mute-outline"}
-              variant={app.videoAudio ? "primary" : "secondary"}
-              onPress={() => app.setVideoAudio(!app.videoAudio)}
-              style={{ flex: 1 }}
-            />
-          </View>
-          <Hint text={t("home.cropHint")} />
-        </GlassCard>
       </ScrollView>
 
       {/* Fullscreen Google Photos viewer with lazy-loaded grid (FlatList
@@ -531,11 +511,16 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 16 },
-  brand: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
-  brandH1: { color: theme.colors.textPrimary, fontSize: 28, fontWeight: "800", letterSpacing: 2 },
-  brandSub: { color: theme.colors.textSecondary, fontSize: 11, letterSpacing: 1, marginTop: 2 },
-  brandIcon: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(17,227,161,0.1)", borderWidth: 1, borderColor: theme.colors.border },
-  statRow: { flexDirection: "row" },
+  brand: { alignItems: "center", marginBottom: 10 },
+  brandH1: { color: theme.colors.textPrimary, fontSize: 22, fontWeight: "800", letterSpacing: 1 },
+  smallToggle: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: theme.radii.pill,
+    borderWidth: 1, borderColor: theme.colors.accent, backgroundColor: "transparent",
+  },
+  smallToggleOn: { backgroundColor: theme.colors.accent, borderColor: theme.colors.accent },
+  smallToggleText: { color: theme.colors.accent, fontSize: theme.font.size.xs, fontWeight: "600" },
+  smallToggleTextOn: { color: "#0b1f14", fontWeight: "700" },
   statItem: { flexDirection: "row", alignItems: "center", gap: 6 },
   statLabel: { color: theme.colors.textSecondary, fontSize: 11, letterSpacing: 1.2, fontWeight: "700" },
   statValue: { color: theme.colors.textPrimary, fontSize: 18, fontWeight: "800", marginTop: 4 },

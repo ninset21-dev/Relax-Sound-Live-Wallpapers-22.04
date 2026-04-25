@@ -54,16 +54,53 @@ class RelaxWallpaperModule(reactContext: ReactApplicationContext) :
      * Android enforces one live wallpaper at a time; HOME vs LOCK distinction is honored by the OS —
      * static wallpaper on LOCK + our live on HOME is the recommended split.
      */
+    /**
+     * Copy a content:// video to the app's private storage so the live
+     * wallpaper service — which runs in a separate window-manager context —
+     * can always read it. Without this, content URIs from MediaLibrary or
+     * DocumentPicker frequently come back as "Permission Denial" inside the
+     * wallpaper engine (req #5 — "video wallpaper not installing"). Returns
+     * the absolute file path on success or `null` to fall back to the
+     * original URI.
+     */
+    private fun materializeVideo(srcUri: String): String? {
+        return try {
+            val ctx = reactApplicationContext
+            if (srcUri.startsWith("file://") || srcUri.startsWith("/")) return srcUri
+            val dest = File(ctx.filesDir, "wallpaper_video.mp4")
+            ctx.contentResolver.openInputStream(Uri.parse(srcUri))?.use { input ->
+                dest.outputStream().use { output -> input.copyTo(output) }
+            } ?: return null
+            "file://" + dest.absolutePath
+        } catch (_: Throwable) { null }
+    }
+
+    private fun materializeImage(srcUri: String): String? {
+        return try {
+            val ctx = reactApplicationContext
+            if (srcUri.startsWith("file://") || srcUri.startsWith("/")) return srcUri
+            val dest = File(ctx.filesDir, "wallpaper_image.bin")
+            ctx.contentResolver.openInputStream(Uri.parse(srcUri))?.use { input ->
+                dest.outputStream().use { output -> input.copyTo(output) }
+            } ?: return null
+            "file://" + dest.absolutePath
+        } catch (_: Throwable) { null }
+    }
+
     @ReactMethod
     fun setLiveWallpaper(params: ReadableMap, promise: Promise) {
         try {
-            val video = if (params.hasKey("videoUri")) params.getString("videoUri") else null
-            val image = if (params.hasKey("imageUri")) params.getString("imageUri") else null
+            val rawVideo = if (params.hasKey("videoUri")) params.getString("videoUri") else null
+            val rawImage = if (params.hasKey("imageUri")) params.getString("imageUri") else null
             val effect = if (params.hasKey("effect")) params.getString("effect") else "none"
             val intensity = if (params.hasKey("intensity")) params.getDouble("intensity").toFloat() else 0.5f
             val speed = if (params.hasKey("speed")) params.getDouble("speed").toFloat() else 1.0f
             val fps = if (params.hasKey("fps")) params.getInt("fps") else 30
             val videoAudio = if (params.hasKey("videoAudio")) params.getBoolean("videoAudio") else false
+            // Materialize content:// URIs to app-private file paths so the
+            // wallpaper service can always read them.
+            val video = rawVideo?.takeIf { it.isNotBlank() }?.let { materializeVideo(it) ?: it }
+            val image = rawImage?.takeIf { it.isNotBlank() }?.let { materializeImage(it) ?: it }
             prefs.edit()
                 .putString("wallpaper_video_uri", video)
                 .putString("wallpaper_image_uri", image)

@@ -110,7 +110,7 @@ export default function SettingsScreen() {
               onPress={() => setA11yRationale(true)} />
           </View>
           <Text style={[styles.body, { marginTop: 6 }]}>
-            {app.a11yEnabled ? "Статус: разрешено" : "Статус: не разрешено"}
+            {app.a11yEnabled ? t("settings.a11yStatusEnabled") : t("settings.a11yStatusDisabled")}
           </Text>
         </GlassCard>
 

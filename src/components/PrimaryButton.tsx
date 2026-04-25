@@ -10,13 +10,15 @@ interface Props {
   variant?: "primary" | "secondary" | "ghost";
   style?: ViewStyle;
   disabled?: boolean;
+  compact?: boolean;
 }
-export const PrimaryButton: React.FC<Props> = ({ label, onPress, icon, variant = "primary", style, disabled }) => (
+export const PrimaryButton: React.FC<Props> = ({ label, onPress, icon, variant = "primary", style, disabled, compact }) => (
   <Pressable
     onPress={onPress}
     disabled={disabled}
     style={({ pressed }) => [
       styles.base,
+      compact && styles.compact,
       variant === "primary" && styles.primary,
       variant === "secondary" && styles.secondary,
       variant === "ghost" && styles.ghost,
@@ -26,8 +28,8 @@ export const PrimaryButton: React.FC<Props> = ({ label, onPress, icon, variant =
     ]}
   >
     <View style={styles.row}>
-      {icon && <Ionicons name={icon} size={18} color={variant === "primary" ? "#0b1f14" : theme.colors.accent} />}
-      <Text style={[styles.text, variant === "primary" ? styles.textPrimary : styles.textAlt, icon && { marginLeft: 8 }]}>
+      {icon && <Ionicons name={icon} size={compact ? 14 : 18} color={variant === "primary" ? "#0b1f14" : theme.colors.accent} />}
+      <Text style={[compact ? styles.textCompact : styles.text, variant === "primary" ? styles.textPrimary : styles.textAlt, icon && { marginLeft: compact ? 4 : 8 }]}>
         {label}
       </Text>
     </View>
@@ -43,6 +45,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border
   },
+  compact: { paddingVertical: 8, paddingHorizontal: 10 },
+  textCompact: { fontSize: theme.font.size.xs, fontWeight: "600" },
   primary: { backgroundColor: theme.colors.accent, borderColor: theme.colors.accent },
   secondary: { backgroundColor: "rgba(17,227,161,0.12)" },
   ghost: { backgroundColor: "transparent" },

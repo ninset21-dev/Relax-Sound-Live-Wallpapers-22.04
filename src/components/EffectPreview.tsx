@@ -47,7 +47,10 @@ export const EffectPreview: React.FC<{
       // Step particles
       const p = particlesRef.current;
       while (p.length < targetCount) p.push(spawn(effect, W, H));
-      const step = 0.016 * Math.max(0.2, Math.min(3, speed));
+      // Effects move at a single uniform tempo (req: "make motion uniform").
+      // We still expose `speed` as a fine-tuning multiplier but bias it
+      // tightly around 1× so tiles all flow with the same rhythm.
+      const step = 0.016 * (0.85 + Math.max(0.2, Math.min(3, speed)) * 0.15);
       for (let i = p.length - 1; i >= 0; i--) {
         const q = p[i];
         q.x += q.vx * step * 60;
@@ -109,25 +112,8 @@ function spawn(effect: EffectKind, w: number, h: number): Particle {
       return common({ y: -20, vx: (rnd() - 0.5) * 1.8, vy: 1.2 + rnd() * 1.2, size: 14 + rnd() * 10, life: 14, maxLife: 14 });
     case "fireflies":
       return common({ x: rnd() * w, y: rnd() * h, vx: (rnd() - 0.5) * 0.8, vy: (rnd() - 0.5) * 0.8, size: 4 + rnd() * 4, life: 6, maxLife: 6 });
-    case "fog":
-      return common({ x: rnd() * w, y: rnd() * h, vx: (rnd() - 0.4) * 0.7, vy: (rnd() - 0.5) * 0.15, size: 80 + rnd() * 100, life: 14, maxLife: 14 });
-    case "frost":
-      return common({ x: rnd() * w, y: rnd() * h, size: 8 + rnd() * 14, life: 18, maxLife: 18 });
     case "stars":
       return common({ x: rnd() * w, y: rnd() * h, size: 1.5 + rnd() * 3, life: 20, maxLife: 20 });
-    case "aurora":
-      return common({ x: rnd() * w, y: rnd() * h * 0.6, vx: (rnd() - 0.5) * 0.4, size: 60 + rnd() * 120, life: 16, maxLife: 16 });
-    case "meteor": {
-      const fromLeft = rnd() > 0.5;
-      return common({
-        x: fromLeft ? -10 : w + 10,
-        y: rnd() * h * 0.5,
-        vx: fromLeft ? 18 + rnd() * 10 : -(18 + rnd() * 10),
-        vy: 22 + rnd() * 10,
-        size: 2 + rnd() * 2,
-        life: 3, maxLife: 3
-      });
-    }
     case "cherryblossom":
       return common({ y: -20, vx: (rnd() - 0.5) * 2.2, vy: 1.4 + rnd() * 1.3, size: 8 + rnd() * 6, life: 14, maxLife: 14 });
     case "plasma":
@@ -154,10 +140,6 @@ function renderParticle(effect: EffectKind, p: Particle, i: number) {
       const pulse = Math.sin(p.phase * 3) * 0.5 + 0.5;
       return <Circle key={i} cx={p.x} cy={p.y} r={p.size * (1.2 + pulse * 0.4)} fill={`rgba(255,255,180,${a * pulse})`} />;
     }
-    case "fog":
-      return <Circle key={i} cx={p.x} cy={p.y} r={p.size} fill={`rgba(200,230,210,${0.12 + Math.sin(p.phase) * 0.05})`} />;
-    case "frost":
-      return <Circle key={i} cx={p.x} cy={p.y} r={p.size} fill="transparent" stroke={`rgba(200,240,255,${a})`} strokeWidth={1.5} />;
     case "stars": {
       const pulse = Math.sin(p.phase * 2) * 0.5 + 0.5;
       return (
@@ -167,15 +149,6 @@ function renderParticle(effect: EffectKind, p: Particle, i: number) {
         </G>
       );
     }
-    case "aurora":
-      return <Circle key={i} cx={p.x} cy={p.y} r={p.size} fill={`rgba(${140 + Math.round(Math.sin(p.phase) * 60)},${200 + Math.round(Math.cos(p.phase) * 40)},${180 + Math.round(Math.sin(p.phase * 1.3) * 60)},0.18)`} />;
-    case "meteor":
-      return (
-        <G key={i}>
-          <Line x1={p.x} y1={p.y} x2={p.x - p.vx * 0.5} y2={p.y - p.vy * 0.5} stroke={`rgba(255,200,120,${a})`} strokeWidth={p.size + 1} />
-          <Circle cx={p.x} cy={p.y} r={p.size + 1} fill={`rgba(255,255,220,${a})`} />
-        </G>
-      );
     case "cherryblossom":
       return <Circle key={i} cx={p.x} cy={p.y} r={p.size * 0.7} fill={`rgba(255,${190 + Math.round(Math.sin(p.phase) * 15)},215,${a})`} />;
     case "plasma": {

@@ -15,11 +15,7 @@ export interface WallpaperParams {
     | "flowers"
     | "particles"
     | "fireflies"
-    | "fog"
-    | "frost"
     | "stars"
-    | "aurora"
-    | "meteor"
     | "cherryblossom"
     | "plasma";
   intensity?: number; // 0..1

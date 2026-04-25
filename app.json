@@ -41,6 +41,10 @@
         "android.permission.BIND_WALLPAPER",
         "android.permission.SET_WALLPAPER"
       ],
+      "blockedPermissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
       "edgeToEdgeEnabled": true,
       "softwareKeyboardLayoutMode": "pan"
     },

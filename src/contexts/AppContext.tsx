@@ -5,9 +5,10 @@ import { Audio, Wallpaper, Widget, Accessibility, onAudioState, onAudioRequest }
 export type MediaItem = { uri: string; type: "image" | "video"; name?: string };
 export type Track = { uri: string; title: string };
 export type PerfMode = "balanced" | "high" | "eco";
-export type StartupSource = "radio" | "local";
 export type Quality = "auto" | "low" | "med" | "high";
 export type RepeatMode = "off" | "all" | "one";
+// Effects fog/frost/aurora/meteor were removed at user request — they did
+// not look right at native scale and added GPU cost.
 export type EffectKind =
   | "none"
   | "snow"
@@ -17,11 +18,7 @@ export type EffectKind =
   | "flowers"
   | "particles"
   | "fireflies"
-  | "fog"
-  | "frost"
   | "stars"
-  | "aurora"
-  | "meteor"
   | "cherryblossom"
   | "plasma";
 
@@ -33,7 +30,6 @@ interface AppState_ {
   volume: number;
   fadeMs: number;
   perfMode: PerfMode;
-  startup: StartupSource;
   quality: Quality;
   effect: EffectKind;
   intensity: number;
@@ -53,6 +49,7 @@ interface AppState_ {
   // URI of the wallpaper image currently applied (drives the blurred
   // app background so the UI reflects the user's chosen scene).
   currentWallpaperUri?: string;
+  wallpaperTarget: "home" | "lock" | "both";
 }
 type Ctx = AppState_ & {
   addMedia(items: MediaItem[]): void;
@@ -65,7 +62,6 @@ type Ctx = AppState_ & {
   setVolume(v: number): void;
   setFadeMs(ms: number): void;
   setPerfMode(m: PerfMode): void;
-  setStartup(s: StartupSource): void;
   setQuality(q: Quality): void;
   setEffect(e: EffectKind): void;
   setIntensity(i: number): void;
@@ -77,6 +73,7 @@ type Ctx = AppState_ & {
   toggleRepeat(): void;
   setLanguage(l: AppState_["language"]): void;
   setUiOpacity(v: number): void;
+  setWallpaperTarget(t: "home" | "lock" | "both"): void;
   play(t: Track): Promise<void>;
   togglePlay(): Promise<void>;
   nextTrack(): Promise<void>;
@@ -92,7 +89,6 @@ const Default: AppState_ = {
   volume: 0.7,
   fadeMs: 2500,
   perfMode: "balanced",
-  startup: "radio",
   quality: "auto",
   effect: "none",
   intensity: 0.5,
@@ -106,7 +102,8 @@ const Default: AppState_ = {
   a11yEnabled: false,
   liveWallpaperActive: false,
   repeatMode: "off",
-  uiOpacity: 1
+  uiOpacity: 1,
+  wallpaperTarget: "both"
 };
 
 const AppCtx = createContext<Ctx | null>(null);
@@ -249,7 +246,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         persist({ perfMode: m, fps: newFps, intensity: newIntensity });
         Wallpaper.updateWallpaperParams({ fps: newFps, intensity: newIntensity, speed: state.speed, effect: state.effect }).catch(() => {});
       },
-      setStartup: (s) => persist({ startup: s }),
       setQuality: (q) => persist({ quality: q }),
       setEffect: (e) => {
         persist({ effect: e });
@@ -284,6 +280,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Opacity is now 0-100% (shows through to underlying wallpaper when
       // lowered). Previous 30% floor was removed per user request.
       setUiOpacity: (v) => persist({ uiOpacity: Math.max(0, Math.min(1, v)) }),
+      setWallpaperTarget: (t) => persist({ wallpaperTarget: t }),
       play: async (t) => {
         persist({ currentTrack: t });
         try {

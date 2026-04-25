@@ -6,11 +6,10 @@ import { useTranslation } from "react-i18next";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BackgroundGradient } from "@/components/BackgroundGradient";
 import { GlassCard } from "@/components/GlassCard";
-import { PrimaryButton } from "@/components/PrimaryButton";
-import { Hint } from "@/components/Hint";
 import { theme } from "@/theme/theme";
 import { useApp, EffectKind } from "@/contexts/AppContext";
 
+// Removed fog/frost/aurora/meteor per req #16.
 const EFFECTS: { key: EffectKind; icon: React.ComponentProps<typeof Ionicons>["name"]; i18nKey: string }[] = [
   { key: "none", icon: "ban-outline", i18nKey: "effects.none" },
   { key: "snow", icon: "snow-outline", i18nKey: "effects.snow" },
@@ -20,11 +19,7 @@ const EFFECTS: { key: EffectKind; icon: React.ComponentProps<typeof Ionicons>["n
   { key: "flowers", icon: "flower-outline", i18nKey: "effects.flowers" },
   { key: "particles", icon: "sparkles-outline", i18nKey: "effects.particles" },
   { key: "fireflies", icon: "bulb-outline", i18nKey: "effects.fireflies" },
-  { key: "fog", icon: "cloudy-outline", i18nKey: "effects.fog" },
-  { key: "frost", icon: "snow-outline", i18nKey: "effects.frost" },
   { key: "stars", icon: "star-outline", i18nKey: "effects.stars" },
-  { key: "aurora", icon: "color-wand-outline", i18nKey: "effects.aurora" },
-  { key: "meteor", icon: "flash-outline", i18nKey: "effects.meteor" },
   { key: "cherryblossom", icon: "flower-outline", i18nKey: "effects.cherryblossom" },
   { key: "plasma", icon: "color-filter-outline", i18nKey: "effects.plasma" },
 ];
@@ -47,34 +42,8 @@ export default function EffectsScreen() {
           </View>
         </View>
 
-        {/* The effect already renders across the whole app via
-            GlobalEffectLayer (in BackgroundGradient). Instead of showing a
-            boxed mini-preview here, give a short status card — the visible
-            effect IS the preview. */}
-        <GlassCard>
-          <View style={[styles.rowBetween]}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.cardHead}>
-                {t("effects.title")}
-              </Text>
-              <Text style={[styles.label, { marginTop: 4 }]}>
-                {app.effect === "none"
-                  ? t("effects.noneDesc")
-                  : t("effects.liveAround")}
-              </Text>
-            </View>
-            <View style={[styles.badgeOk, { marginLeft: 10 }]}>
-              <Ionicons
-                name={app.effect === "none" ? "ban-outline" : "sparkles"}
-                size={12}
-                color="#0b1f14"
-              />
-              <Text style={[styles.badgeOkText, { marginLeft: 4 }]}>
-                {app.effect === "none" ? t("common.off") : t("common.on")}
-              </Text>
-            </View>
-          </View>
-        </GlassCard>
+        {/* Status tile removed (req #16) — the on-screen effect is the
+            status. */}
 
         <GlassCard>
           <Text style={styles.cardHead}>{t("effects.enginePerf")}</Text>
@@ -121,43 +90,20 @@ export default function EffectsScreen() {
             onValueChange={(v) => app.setSpeed(v)} />
         </GlassCard>
 
-        <View style={styles.rowBetween}>
-          <Text style={styles.cardHead}>{t("effects.atmosphericLayers")}</Text>
-          <Pressable onPress={() => app.setEffect("none")} style={styles.resetBtn}>
-            <Text style={styles.resetText}>{t("effects.reset")}</Text>
-          </Pressable>
-        </View>
-
+        {/* Reset button + lock/home target buttons removed (req #16).
+            Effect tiles are now compact (3 columns). */}
+        <Text style={styles.cardHead}>{t("effects.atmosphericLayers")}</Text>
         <View style={styles.layerGrid}>
           {EFFECTS.map((e) => {
             const isSelected = app.effect === e.key;
             return (
-              <Pressable key={e.key} onPress={() => app.setEffect(e.key)} style={[styles.layerCell, isSelected && styles.layerCellActive]}>
-                <Ionicons name={e.icon} size={24} color={isSelected ? "#0b1f14" : theme.colors.accent} />
-                <Text style={[styles.layerLabel, isSelected && styles.layerLabelActive]}>{t(e.i18nKey)}</Text>
-                <View style={[styles.switchDot, isSelected && styles.switchDotOn]}>
-                  <View style={[styles.switchKnob, isSelected && styles.switchKnobOn]} />
-                </View>
+              <Pressable key={e.key} onPress={() => app.setEffect(e.key)} style={[styles.layerCellCompact, isSelected && styles.layerCellActive]}>
+                <Ionicons name={e.icon} size={20} color={isSelected ? "#0b1f14" : theme.colors.accent} />
+                <Text style={[styles.layerLabelCompact, isSelected && styles.layerLabelActive]} numberOfLines={1}>{t(e.i18nKey)}</Text>
               </Pressable>
             );
           })}
         </View>
-
-        <PrimaryButton
-          label={t("home.setLock")}
-          icon="lock-closed-outline"
-          onPress={() => app.applyLiveWallpaper("lock")}
-          style={{ marginTop: 12 }}
-        />
-        <PrimaryButton
-          label={t("home.setHome")}
-          icon="home-outline"
-          variant="secondary"
-          onPress={() => app.applyLiveWallpaper("home")}
-          style={{ marginTop: 8 }}
-        />
-
-        <Hint text={t("effects.syncHint")} />
       </ScrollView>
     </BackgroundGradient>
   );
@@ -185,6 +131,13 @@ const styles = StyleSheet.create({
   resetText: { color: theme.colors.accent, fontSize: 12, fontWeight: "600" },
   layerGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginTop: 6 },
   layerCell: { width: "48%", aspectRatio: 1.3, marginBottom: 10, borderRadius: 22, padding: 14, backgroundColor: "rgba(10,28,20,0.7)", borderWidth: 1, borderColor: theme.colors.border, justifyContent: "space-between" },
+  layerCellCompact: {
+    width: "31%", aspectRatio: 1.4, marginBottom: 8, borderRadius: 14,
+    paddingVertical: 10, paddingHorizontal: 6,
+    backgroundColor: "rgba(10,28,20,0.7)", borderWidth: 1, borderColor: theme.colors.border,
+    alignItems: "center", justifyContent: "center", gap: 4,
+  },
+  layerLabelCompact: { color: theme.colors.textSecondary, fontSize: 11, fontWeight: "600" },
   layerCellActive: { backgroundColor: "rgba(17,227,161,0.22)", borderColor: theme.colors.accent },
   layerLabel: { color: theme.colors.textSecondary, fontSize: 14, fontWeight: "600" },
   layerLabelActive: { color: theme.colors.textPrimary },

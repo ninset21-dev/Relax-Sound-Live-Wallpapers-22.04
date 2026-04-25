@@ -8,7 +8,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BackgroundGradient } from "@/components/BackgroundGradient";
 import { GlassCard } from "@/components/GlassCard";
 import { PrimaryButton } from "@/components/PrimaryButton";
-import { Hint } from "@/components/Hint";
 import { theme } from "@/theme/theme";
 import { useApp, Track } from "@/contexts/AppContext";
 import { GENRES, popularByGenre, probeStations, Station } from "@/services/radio";
@@ -22,6 +21,9 @@ export default function MusicScreen() {
   const [stations, setStations] = useState<Station[]>([]);
   const [loading, setLoading] = useState(false);
   const [trackSel, setTrackSel] = useState<Set<string>>(new Set());
+  // Collapsible state for radio/my-music sections (req #2).
+  const [radioOpen, setRadioOpen] = useState(true);
+  const [musicOpen, setMusicOpen] = useState(true);
   const genreRef = useRef(genre);
   useEffect(() => { genreRef.current = genre; }, [genre]);
 
@@ -80,13 +82,12 @@ export default function MusicScreen() {
         <GlassCard>
           <Text style={styles.sectionTitle}>{t("music.nowPlaying")}</Text>
           <Text style={styles.body}>{current?.title ?? t("music.noTrack")}</Text>
-          <View style={[styles.row, { marginTop: 10, gap: 8 }]}>
-            <PrimaryButton label={t("music.prev")} icon="play-skip-back" variant="secondary" onPress={() => app.prevTrack()} style={{ flex: 1 }} />
+          {/* Compact transport (req #14). */}
+          <View style={[styles.row, { marginTop: 8, gap: 6 }]}>
+            <PrimaryButton label={t("music.prev")} icon="play-skip-back" variant="secondary" onPress={() => app.prevTrack()} style={{ flex: 1 }} compact />
             <PrimaryButton label={app.isPlaying ? t("music.pause") : t("music.play")}
-              icon={app.isPlaying ? "pause" : "play"} onPress={() => app.togglePlay()} style={{ flex: 1 }} />
-            <PrimaryButton label={t("music.next")} icon="play-skip-forward" variant="secondary" onPress={() => app.nextTrack()} style={{ flex: 1 }} />
-          </View>
-          <View style={[styles.row, { marginTop: 8 }]}>
+              icon={app.isPlaying ? "pause" : "play"} onPress={() => app.togglePlay()} style={{ flex: 1 }} compact />
+            <PrimaryButton label={t("music.next")} icon="play-skip-forward" variant="secondary" onPress={() => app.nextTrack()} style={{ flex: 1 }} compact />
             <PrimaryButton
               label={
                 app.repeatMode === "off" ? t("music.repeatOff")
@@ -97,6 +98,7 @@ export default function MusicScreen() {
               variant={app.repeatMode === "off" ? "secondary" : "primary"}
               onPress={() => app.toggleRepeat()}
               style={{ flex: 1 }}
+              compact
             />
           </View>
           <Text style={[styles.label, { marginTop: 10 }]}>{t("music.volume")}: {Math.round(app.volume * 100)}%</Text>
@@ -112,31 +114,13 @@ export default function MusicScreen() {
         </GlassCard>
 
         <GlassCard>
-          <Text style={styles.sectionTitle}>{t("music.startupSource")}</Text>
-          <View style={[styles.row, { marginTop: 6, gap: 8 }]}>
-            <PrimaryButton label={t("music.startupRadio")}
-              variant={app.startup === "radio" ? "primary" : "secondary"}
-              onPress={() => app.setStartup("radio")} style={{ flex: 1 }} />
-            <PrimaryButton label={t("music.startupLocal")}
-              variant={app.startup === "local" ? "primary" : "secondary"}
-              onPress={() => app.setStartup("local")} style={{ flex: 1 }} />
-          </View>
-          <Text style={[styles.label, { marginTop: 12 }]}>{t("music.quality")}</Text>
-          <View style={[styles.row, { flexWrap: "wrap" }]}>
-            {(["auto", "low", "med", "high"] as const).map((q) => (
-              <Pressable key={q} onPress={() => { app.setQuality(q); loadGenre(genre, q); }} style={[styles.chip, app.quality === q && styles.chipActive]}>
-                <Text style={[styles.chipText, app.quality === q && styles.chipTextActive]}>
-                  {q === "auto" ? t("music.qualityAuto") : q === "low" ? t("music.qualityLow") : q === "med" ? t("music.qualityMed") : t("music.qualityHigh")}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </GlassCard>
-
-        <GlassCard>
-          <Text style={styles.sectionTitle}>{t("music.local")}</Text>
+          <Pressable onPress={() => setMusicOpen(!musicOpen)} style={styles.collapseHead}>
+            <Text style={styles.sectionTitle}>{t("music.local")}</Text>
+            <Ionicons name={musicOpen ? "chevron-up" : "chevron-down"} size={20} color={theme.colors.accent} />
+          </Pressable>
+          {musicOpen && <>
           <Text style={styles.body}>{t("music.pickHint")}</Text>
-          <PrimaryButton label={t("music.pick")} icon="folder-open-outline" onPress={pickTracks} style={{ marginTop: 8 }} />
+          <PrimaryButton label={t("music.pick")} icon="folder-open-outline" onPress={pickTracks} style={{ marginTop: 6 }} compact />
           {app.tracks.length > 0 && (
             <View style={[styles.row, { marginTop: 8, gap: 6 }]}>
               <Pressable
@@ -184,7 +168,7 @@ export default function MusicScreen() {
               )}
             </View>
           )}
-          <View style={{ marginTop: 8 }}>
+          <View style={{ marginTop: 6 }}>
             {app.tracks.map((tr, i) => {
               const sel = trackSel.has(tr.uri);
               return (
@@ -214,12 +198,27 @@ export default function MusicScreen() {
             })}
             {app.tracks.length === 0 && <Text style={styles.body}>{t("music.pickHint")}</Text>}
           </View>
+          </>}
         </GlassCard>
 
         <GlassCard>
-          <Text style={styles.sectionTitle}>{t("music.radio")}</Text>
+          <Pressable onPress={() => setRadioOpen(!radioOpen)} style={styles.collapseHead}>
+            <Text style={styles.sectionTitle}>{t("music.radio")}</Text>
+            <Ionicons name={radioOpen ? "chevron-up" : "chevron-down"} size={20} color={theme.colors.accent} />
+          </Pressable>
+          {radioOpen && <>
           <Text style={styles.body}>{t("music.radioHint")}</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 8 }}>
+          {/* Quality chips moved into radio menu (req #15). */}
+          <View style={[styles.row, { flexWrap: "wrap", marginTop: 4 }]}>
+            {(["auto", "low", "med", "high"] as const).map((q) => (
+              <Pressable key={q} onPress={() => { app.setQuality(q); loadGenre(genre, q); }} style={[styles.chip, app.quality === q && styles.chipActive]}>
+                <Text style={[styles.chipText, app.quality === q && styles.chipTextActive]}>
+                  {q === "auto" ? t("music.qualityAuto") : q === "low" ? t("music.qualityLow") : q === "med" ? t("music.qualityMed") : t("music.qualityHigh")}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 6 }}>
             {GENRES.map((g) => (
               <Pressable key={g} onPress={() => loadGenre(g)} style={[styles.chip, genre === g && styles.chipActive, { marginRight: 6 }]}>
                 <Text style={[styles.chipText, genre === g && styles.chipTextActive]}>{g}</Text>
@@ -237,7 +236,7 @@ export default function MusicScreen() {
             </Pressable>
           ))}
           {!loading && stations.length === 0 && <Text style={styles.body}>{t("music.noStations", { genre })}</Text>}
-          <Hint text={t("music.qualityHint")} />
+          </>}
         </GlassCard>
       </ScrollView>
     </BackgroundGradient>
@@ -268,5 +267,6 @@ const styles = StyleSheet.create({
   },
   ghostBtnText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: "600" },
   trackName: { color: theme.colors.textPrimary, fontSize: theme.font.size.sm, flex: 1 },
-  station: { flexDirection: "row", alignItems: "center", paddingVertical: 10, gap: 8, borderTopWidth: 1, borderTopColor: theme.colors.border }
+  station: { flexDirection: "row", alignItems: "center", paddingVertical: 10, gap: 8, borderTopWidth: 1, borderTopColor: theme.colors.border },
+  collapseHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }
 });

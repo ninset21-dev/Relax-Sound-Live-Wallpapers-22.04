@@ -78,6 +78,10 @@ class RelaxAccessibilityModule(ctx: ReactApplicationContext) : ReactContextBaseJ
 }
 `;
 
+// android:description / android:summary surface inside Settings >
+// Accessibility so the user knows what the service does and why it
+// needs to be enabled (req #4 — Google Play requires a clear
+// rationale for accessibility usage).
 const CONFIG_XML = `<?xml version="1.0" encoding="utf-8"?>
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeAllMask"
@@ -85,7 +89,16 @@ const CONFIG_XML = `<?xml version="1.0" encoding="utf-8"?>
     android:accessibilityFlags="flagDefault"
     android:notificationTimeout="100"
     android:canPerformGestures="true"
+    android:description="@string/a11y_double_tap_description"
+    android:summary="@string/a11y_double_tap_summary"
     android:canRetrieveWindowContent="false"/>
+`;
+
+const STRINGS_XML = `<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <string name="a11y_double_tap_summary">Lock the screen by double-tapping the live wallpaper</string>
+    <string name="a11y_double_tap_description">Relax Sound Live Wallpapers uses this Accessibility Service for a single purpose: when you double-tap the home screen, it performs the global "lock screen" action so the display turns off without using the power button. The service does not read screen content, does not track activity, and does not transmit any data. You can disable it at any time in Accessibility settings.</string>
+</resources>
 `;
 
 const withA11yManifest = (config) =>
@@ -123,6 +136,7 @@ const withA11yFiles = (config) =>
       writeNativeSource(root, "a11y/DoubleTapLockService.kt", SERVICE_KT);
       writeNativeSource(root, "native/RelaxAccessibilityModule.kt", MODULE_KT);
       writeResource(root, "xml/double_tap_lock_config.xml", CONFIG_XML);
+      writeResource(root, "values/a11y_strings.xml", STRINGS_XML);
       return config;
     }
   ]);

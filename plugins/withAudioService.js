@@ -37,6 +37,7 @@ class RelaxAudioService : Service() {
         const val ACTION_DUCK = "${PKG}.audio.DUCK"
         const val ACTION_UNDUCK = "${PKG}.audio.UNDUCK"
         const val ACTION_TOGGLE_REPEAT = "${PKG}.audio.TOGGLE_REPEAT"
+        const val ACTION_RESUME = "${PKG}.audio.RESUME"
         const val EXTRA_URL = "url"
         const val EXTRA_TITLE = "title"
         const val EXTRA_VOLUME = "volume"
@@ -112,6 +113,13 @@ class RelaxAudioService : Service() {
             }
             ACTION_PAUSE -> pauseInternal(userInitiated = true)
             ACTION_TOGGLE -> togglePlayPause()
+            ACTION_RESUME -> {
+                // Triggered by AudioWakeReceiver on USER_PRESENT/SCREEN_ON.
+                // We don't toggle here — only resume if the user had music
+                // playing before lock (was_playing=true).
+                val prefs = getSharedPreferences("relax_audio", MODE_PRIVATE)
+                if (prefs.getBoolean("was_playing", false)) fadeInAndResume()
+            }
             ACTION_NEXT -> stepPlaylist(+1)
             ACTION_PREV -> stepPlaylist(-1)
             ACTION_DUCK -> duck()
@@ -603,6 +611,42 @@ class RelaxAudioModule(reactContext: ReactApplicationContext) :
 }
 `;
 
+// Manifest-declared receiver that starts the audio service on USER_PRESENT
+// (screen unlock) and BOOT_COMPLETED. Without a manifest receiver, an unlock
+// after Doze/LowMemoryKiller killed the in-service screenReceiver would never
+// resume music — req #17 ("music must auto-play on unlock"). USER_PRESENT and
+// BOOT_COMPLETED are both still allowed in manifest on modern Android.
+const WAKE_RECEIVER_KT = `package ${PKG}.audio
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+
+class AudioWakeReceiver : BroadcastReceiver() {
+    override fun onReceive(ctx: Context, intent: Intent) {
+        when (intent.action) {
+            Intent.ACTION_USER_PRESENT, Intent.ACTION_SCREEN_ON,
+            Intent.ACTION_BOOT_COMPLETED, "android.intent.action.LOCKED_BOOT_COMPLETED" -> {
+                val prefs = ctx.getSharedPreferences("relax_audio", Context.MODE_PRIVATE)
+                val wasPlaying = prefs.getBoolean("was_playing", false)
+                val lastUrl = prefs.getString("last_url", null)
+                if (!wasPlaying || lastUrl.isNullOrBlank()) return
+                // Wake the foreground service. It will pick up was_playing and
+                // resume via fadeInAndResume() in onStartCommand → ACTION_RESUME.
+                val svc = Intent(ctx, RelaxAudioService::class.java).apply {
+                    action = RelaxAudioService.ACTION_RESUME
+                }
+                try {
+                    if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(svc)
+                    else ctx.startService(svc)
+                } catch (_: Throwable) {}
+            }
+        }
+    }
+}
+`;
+
 const withAudioManifest = (config) =>
   withAndroidManifest(config, (config) => {
     const app = AndroidConfig.Manifest.getMainApplicationOrThrow(config.modResults);
@@ -616,6 +660,18 @@ const withAudioManifest = (config) =>
         }
       });
     }
+    app["receiver"] = app["receiver"] || [];
+    if (!app["receiver"].some((r) => r.$["android:name"] === ".audio.AudioWakeReceiver")) {
+      app["receiver"].push({
+        $: { "android:name": ".audio.AudioWakeReceiver", "android:exported": "true" },
+        "intent-filter": [
+          { action: [{ $: { "android:name": "android.intent.action.USER_PRESENT" } }] },
+          { action: [{ $: { "android:name": "android.intent.action.SCREEN_ON" } }] },
+          { action: [{ $: { "android:name": "android.intent.action.BOOT_COMPLETED" } }] },
+          { action: [{ $: { "android:name": "android.intent.action.LOCKED_BOOT_COMPLETED" } }] }
+        ]
+      });
+    }
     return config;
   });
 
@@ -625,6 +681,7 @@ const withAudioFiles = (config) =>
     async (config) => {
       const root = config.modRequest.projectRoot;
       writeNativeSource(root, "audio/RelaxAudioService.kt", SERVICE_KT);
+      writeNativeSource(root, "audio/AudioWakeReceiver.kt", WAKE_RECEIVER_KT);
       writeNativeSource(root, "native/RelaxAudioModule.kt", MODULE_KT);
       return config;
     }

@@ -42,7 +42,7 @@ open class RelaxWidgetBase(private val size: String) : AppWidgetProvider() {
      */
     private fun cycleEffect(ctx: Context) {
         val wp = ctx.getSharedPreferences("relax_wallpaper_prefs", Context.MODE_PRIVATE)
-        val order = listOf("none", "snow", "rain", "bubbles", "leaves", "flowers", "particles", "fireflies", "fog", "frost", "stars", "aurora", "meteor", "cherryblossom", "plasma")
+        val order = listOf("none", "snow", "rain", "bubbles", "leaves", "flowers", "particles", "fireflies", "stars", "cherryblossom", "plasma")
         val cur = wp.getString("effect_type", "none") ?: "none"
         val next = order[(order.indexOf(cur).coerceAtLeast(0) + 1) % order.size]
         wp.edit().putString("effect_type", next).apply()
@@ -124,12 +124,18 @@ open class RelaxWidgetBase(private val size: String) : AppWidgetProvider() {
             val audioPrefs = ctx.getSharedPreferences("relax_audio", Context.MODE_PRIVATE)
             val widgetPrefs = ctx.getSharedPreferences("relax_widget", Context.MODE_PRIVATE)
             val title = audioPrefs.getString("title", "Relax Sound") ?: "Relax Sound"
-            val vol = audioPrefs.getFloat("vol", 0.7f)
             val mode = widgetPrefs.getString("mode", "video") ?: "video"
+            val isPlaying = audioPrefs.getBoolean("was_playing", false)
 
             try { views.setTextViewText(R.id::class.java.getField("title").getInt(null), title) } catch (_: Throwable) {}
             try { views.setTextViewText(R.id::class.java.getField("mode_label").getInt(null), mode.uppercase()) } catch (_: Throwable) {}
-            try { views.setProgressBar(R.id::class.java.getField("vol_bar").getInt(null), 100, (vol * 100).toInt(), false) } catch (_: Throwable) {}
+            // Toggle the play/pause icon on the widget so it reflects the
+            // actual playback state — req #1 / #11.
+            try {
+                val tid = R.id::class.java.getField("btn_toggle").getInt(null)
+                views.setImageViewResource(tid, if (isPlaying)
+                    android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play)
+            } catch (_: Throwable) {}
 
             // Always target ONE concrete receiver (Small) so the action is
             // delivered exactly once — otherwise all 3 widget receivers would
@@ -139,14 +145,16 @@ open class RelaxWidgetBase(private val size: String) : AppWidgetProvider() {
                 PendingIntent.getBroadcast(ctx, action.hashCode(), i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             }
 
+            // Volume controls live on the floating widget only — req #8
+            // ("remove the volume slider everywhere except the floating
+            // widget"). The volume actions remain registered but the
+            // home-screen widgets no longer surface them.
             listOf(
                 "btn_toggle" to ACTION_TOGGLE,
                 "btn_next" to ACTION_NEXT,
                 "btn_prev" to ACTION_PREV,
                 "btn_mode" to ACTION_CYCLE_MODE,
-                "btn_change_wp" to ACTION_CHANGE_WALLPAPER,
-                "btn_vol_up" to ACTION_VOL_UP,
-                "btn_vol_down" to ACTION_VOL_DOWN
+                "btn_change_wp" to ACTION_CHANGE_WALLPAPER
             ).forEach { (viewName, action) ->
                 try {
                     val vid = R.id::class.java.getField(viewName).getInt(null)
@@ -240,59 +248,53 @@ class RelaxWidgetModule(ctx: ReactApplicationContext) : ReactContextBaseJavaModu
 
 const widgetLayout = (variant) => {
   const showPrevNext = variant !== "small";
-  const showVol = variant !== "small";
   const showMode = variant === "large" || variant === "medium";
+  // Polished layout: title centered, controls in a single row, no volume
+  // slider (per req #8). The frosty dark-green background mirrors the
+  // mockups in design-screenshots.zip.
   return `<?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent" android:layout_height="match_parent"
-    android:padding="10dp" android:orientation="vertical"
+    android:padding="12dp" android:orientation="vertical"
     android:background="@drawable/widget_background">
     <TextView android:id="@+id/title"
         android:layout_width="match_parent" android:layout_height="wrap_content"
         android:text="Relax Sound"
-        android:textColor="#E8FFEF" android:textSize="14sp" android:singleLine="true"/>
+        android:textColor="#E8FFEF" android:textSize="14sp" android:textStyle="bold"
+        android:singleLine="true" android:ellipsize="end" android:gravity="center_horizontal"/>
     ${showMode ? `<TextView android:id="@+id/mode_label"
         android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:text="VIDEO" android:textColor="#9EE2B8" android:textSize="10sp"/>` : ""}
+        android:text="VIDEO" android:textColor="#22c55e" android:textSize="10sp"
+        android:gravity="center_horizontal" android:layout_marginTop="2dp"/>` : ""}
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:orientation="horizontal" android:layout_marginTop="6dp">
+        android:orientation="horizontal" android:layout_marginTop="8dp"
+        android:gravity="center" android:weightSum="${showPrevNext ? 5 : 3}">
         ${showPrevNext ? `<ImageButton android:id="@+id/btn_prev"
-            android:layout_width="36dp" android:layout_height="36dp"
+            android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1"
             android:background="@android:color/transparent"
-            android:src="@android:drawable/ic_media_previous" android:tint="#E8FFEF"/>` : ""}
+            android:src="@android:drawable/ic_media_previous" android:tint="#E8FFEF"
+            android:scaleType="fitCenter" android:padding="6dp"/>` : ""}
         <ImageButton android:id="@+id/btn_toggle"
-            android:layout_width="36dp" android:layout_height="36dp"
+            android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1"
             android:background="@android:color/transparent"
-            android:src="@android:drawable/ic_media_play" android:tint="#E8FFEF"/>
+            android:src="@android:drawable/ic_media_play" android:tint="#22c55e"
+            android:scaleType="fitCenter" android:padding="4dp"/>
         ${showPrevNext ? `<ImageButton android:id="@+id/btn_next"
-            android:layout_width="36dp" android:layout_height="36dp"
+            android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1"
             android:background="@android:color/transparent"
-            android:src="@android:drawable/ic_media_next" android:tint="#E8FFEF"/>` : ""}
+            android:src="@android:drawable/ic_media_next" android:tint="#E8FFEF"
+            android:scaleType="fitCenter" android:padding="6dp"/>` : ""}
         <ImageButton android:id="@+id/btn_mode"
-            android:layout_width="36dp" android:layout_height="36dp"
+            android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1"
             android:background="@android:color/transparent"
-            android:src="@android:drawable/ic_menu_rotate" android:tint="#9EE2B8"/>
+            android:src="@android:drawable/ic_menu_rotate" android:tint="#9EE2B8"
+            android:scaleType="fitCenter" android:padding="6dp"/>
         <ImageButton android:id="@+id/btn_change_wp"
-            android:layout_width="36dp" android:layout_height="36dp"
+            android:layout_width="0dp" android:layout_height="40dp" android:layout_weight="1"
             android:background="@android:color/transparent"
-            android:src="@android:drawable/ic_menu_gallery" android:tint="#9EE2B8"/>
+            android:src="@android:drawable/ic_menu_gallery" android:tint="#9EE2B8"
+            android:scaleType="fitCenter" android:padding="6dp"/>
     </LinearLayout>
-    ${showVol ? `<LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:orientation="horizontal" android:layout_marginTop="6dp" android:gravity="center_vertical">
-        <ImageButton android:id="@+id/btn_vol_down"
-            android:layout_width="32dp" android:layout_height="32dp"
-            android:background="@android:color/transparent"
-            android:src="@android:drawable/ic_lock_silent_mode" android:tint="#E8FFEF"/>
-        <ProgressBar android:id="@+id/vol_bar"
-            style="@android:style/Widget.ProgressBar.Horizontal"
-            android:layout_width="0dp" android:layout_weight="1" android:layout_height="8dp"
-            android:layout_marginStart="6dp" android:layout_marginEnd="6dp"
-            android:max="100" android:progress="70"/>
-        <ImageButton android:id="@+id/btn_vol_up"
-            android:layout_width="32dp" android:layout_height="32dp"
-            android:background="@android:color/transparent"
-            android:src="@android:drawable/ic_lock_silent_mode_off" android:tint="#E8FFEF"/>
-    </LinearLayout>` : ""}
 </LinearLayout>
 `;
 };
