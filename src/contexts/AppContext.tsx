@@ -186,15 +186,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   useEffect(() => {
-    const sub = onAudioState((s) =>
-      setState((p) => ({
-        ...p,
-        isPlaying: s.isPlaying,
-        volume: s.volume,
-        repeatMode: (s.repeatMode as RepeatMode) ?? p.repeatMode,
-        currentTrack: p.currentTrack ? { ...p.currentTrack, title: s.title || p.currentTrack.title } : p.currentTrack
-      }))
-    );
+    const sub = onAudioState((s) => {
+      setState((p) => {
+        const nextRepeat = (s.repeatMode as RepeatMode) ?? p.repeatMode;
+        // Persist the repeat mode if it actually changed (e.g. driven by
+        // widget). High-frequency volume/playing toggles are NOT persisted
+        // here to avoid hammering AsyncStorage on every audio broadcast.
+        if (nextRepeat !== p.repeatMode) {
+          AsyncStorage.setItem(
+            STORAGE_KEY,
+            JSON.stringify({ ...p, repeatMode: nextRepeat })
+          ).catch(() => {});
+        }
+        return {
+          ...p,
+          isPlaying: s.isPlaying,
+          volume: s.volume,
+          repeatMode: nextRepeat,
+          currentTrack: p.currentTrack ? { ...p.currentTrack, title: s.title || p.currentTrack.title } : p.currentTrack
+        };
+      });
+    });
     return () => sub.remove();
   }, []);
 

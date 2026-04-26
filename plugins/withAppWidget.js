@@ -202,10 +202,10 @@ class RelaxWidgetModule(ctx: ReactApplicationContext) : ReactContextBaseJavaModu
         c.getSharedPreferences("relax_widget", Context.MODE_PRIVATE).edit()
             .putString("mode", mode).apply()
         val mgr = AppWidgetManager.getInstance(c)
-        listOf(RelaxWidgetSmall::class.java, RelaxWidgetMedium::class.java, RelaxWidgetLarge::class.java)
+        listOf(RelaxWidgetSmall::class.java, RelaxWidgetMedium::class.java, RelaxWidgetVolume::class.java)
             .forEach { clz ->
                 val ids = mgr.getAppWidgetIds(ComponentName(c, clz))
-                val sz = when (clz.simpleName) { "RelaxWidgetSmall" -> "small"; "RelaxWidgetLarge" -> "large"; else -> "medium" }
+                val sz = when (clz.simpleName) { "RelaxWidgetSmall" -> "small"; "RelaxWidgetVolume" -> "volume"; else -> "medium" }
                 ids.forEach { id -> RelaxWidgetBase.updateWidget(c, mgr, id, sz) }
             }
         promise.resolve(true)

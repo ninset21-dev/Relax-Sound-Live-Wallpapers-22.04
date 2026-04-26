@@ -11,6 +11,11 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { theme } from "@/theme/theme";
 import { useApp } from "@/contexts/AppContext";
 import { Accessibility, Floating } from "@/native";
+import Constants from "expo-constants";
+
+// Single source of truth: read the version from app.json via expo-constants
+// so the displayed version is always in sync with the build.
+const APP_VERSION = (Constants.expoConfig?.version as string | undefined) ?? "";
 
 const PRIVACY_URL =
   "https://sites.google.com/view/relax-sound-live-wallpapers/%D0%B3%D0%BB%D0%B0%D0%B2%D0%BD%D0%B0%D1%8F-%D1%81%D1%82%D1%80%D0%B0%D0%BD%D0%B8%D1%86%D0%B0";
@@ -155,7 +160,7 @@ export default function SettingsScreen() {
           </Pressable>
         </GlassCard>
 
-        <Text style={styles.footer}>Relax Sound Live Wallpapers v2.6</Text>
+        <Text style={styles.footer}>Relax Sound Live Wallpapers v{APP_VERSION}</Text>
       </ScrollView>
 
       {/* Accessibility rationale modal — Google Play requires apps to
@@ -203,7 +208,7 @@ export default function SettingsScreen() {
             </View>
             <ScrollView style={{ flex: 1, marginTop: 14 }}>
               <Text style={styles.aboutBig}>Relax Sound Live Wallpapers</Text>
-              <Text style={styles.body}>Version 2.6 • Nature Engine</Text>
+              <Text style={styles.body}>Version {APP_VERSION} • Nature Engine</Text>
               <View style={{ height: 14 }} />
               <Text style={styles.modalBody}>{t("settings.aboutBody")}</Text>
               <View style={{ height: 14 }} />

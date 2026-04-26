@@ -19,20 +19,28 @@ export const AnimatedSplash: React.FC<{ onDone: () => void; durationMs?: number 
   const pulse = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.parallel([
+    // The pulse loop runs forever, so we drive it independently from the fade.
+    // If we put the loop inside Animated.parallel, the parallel completion
+    // callback never fires (parallel waits for ALL children) and the splash
+    // would stay mounted permanently — leaking the loop onto the CPU.
+    const fadeAnim = Animated.sequence([
+      Animated.timing(fade, { toValue: 1, duration: 320, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+      Animated.delay(Math.max(0, durationMs - 640)),
+      Animated.timing(fade, { toValue: 0, duration: 320, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+    ]);
+    const pulseAnim = Animated.loop(
       Animated.sequence([
-        Animated.timing(fade, { toValue: 1, duration: 320, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-        Animated.delay(durationMs - 320),
-        Animated.timing(fade, { toValue: 0, duration: 320, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
       ]),
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulse, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-          Animated.timing(pulse, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        ]),
-        { iterations: -1 }
-      ),
-    ]).start(() => onDone());
+      { iterations: -1 }
+    );
+    pulseAnim.start();
+    fadeAnim.start(() => {
+      pulseAnim.stop();
+      onDone();
+    });
+    return () => { pulseAnim.stop(); fadeAnim.stop(); };
   }, [durationMs, fade, pulse, onDone]);
 
   const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1.08] });

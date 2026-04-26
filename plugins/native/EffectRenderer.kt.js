@@ -95,9 +95,12 @@ class EffectRenderer(private val context: Context, private val prefs: SharedPref
         val windY = sin(worldT * 0.21f) * 0.25f
         val gravity = gravityFor(effect)
         // Touch interaction decay — strength fades over ~0.6s after lift.
-        if (touchStrength > 0f && lastTouchNs > 0L) {
-            val sinceTouchSec = (System.nanoTime() - lastTouchNs) / 1_000_000_000f
-            touchStrength = (touchStrength - sinceTouchSec * 0.0016f).coerceAtLeast(0f)
+        // Decay per *frame* (deltaSec), not total elapsed since last touch:
+        // 1.6 / 0.6s ≈ ~2.7 strength/sec, so an initial 0.4 reaches 0 in
+        // about 0.15s of release-decay; from a hold of 1.0 it reaches 0 in
+        // ~0.6s, matching the documented intent.
+        if (touchStrength > 0f) {
+            touchStrength = (touchStrength - deltaSec * 1.6f).coerceAtLeast(0f)
         }
 
         val it = particles.iterator()
