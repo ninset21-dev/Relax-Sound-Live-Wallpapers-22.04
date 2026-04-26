@@ -1,4 +1,4 @@
-const { withAndroidStyles, withAndroidManifest, withMainActivity, AndroidConfig } = require("@expo/config-plugins");
+const { withAndroidStyles, withMainActivity } = require("@expo/config-plugins");
 
 /**
  * Makes MainActivity translucent so the user's actual home-screen / live
@@ -40,22 +40,12 @@ const withTransparentActivity = (config) => {
     return cfg;
   });
 
-  // Mark MainActivity as android:showWallpaper="true" so the system draws
-  // the user's actual launcher wallpaper *behind* our translucent activity.
-  // Pair with the windowShowWallpaper theme item above. Both are required
-  // on different Android versions.
-  config = withAndroidManifest(config, (cfg) => {
-    const app = cfg.modResults.manifest.application?.[0];
-    if (app && app.activity) {
-      const main = app.activity.find(
-        (a) => a.$ && a.$["android:name"] === ".MainActivity"
-      );
-      if (main && main.$) {
-        main.$["android:showWallpaper"] = "true";
-      }
-    }
-    return cfg;
-  });
+  // NOTE: we deliberately do NOT add android:showWallpaper="true" to the
+  // <activity> element — that attribute is private (NOT part of the public
+  // Android SDK), so AAPT2 rejects it with "attribute android:showWallpaper
+  // is private" and the build fails. The theme item
+  // android:windowShowWallpaper=true (above) is the public, supported way
+  // to mark the window as wallpaper-backed and works on all API levels.
 
   // Set the React root view + decor view backgrounds to transparent in
   // MainActivity.kt so the user's launcher actually shows through when

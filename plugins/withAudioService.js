@@ -58,17 +58,18 @@ class RelaxAudioService : Service() {
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context, intent: Intent) {
             when (intent.action) {
-                // CRITICAL (user req): do NOT pause on SCREEN_OFF. The user
-                // wants music to keep playing in the background like a real
-                // audio player even when the screen is off. Audio focus loss
-                // (another app starting playback) still pauses us via the
-                // focus listener, which is the correct behaviour.
+                // SCREEN_OFF pauses (user req): we set was_playing=true
+                // separately so unlock can resume. We don't go through
+                // pauseInternal(userInitiated=true) because that would
+                // wipe was_playing — instead we use a transient pause
+                // path that preserves the resume flag.
+                Intent.ACTION_SCREEN_OFF -> pauseInternal(userInitiated = false)
                 Intent.ACTION_USER_PRESENT, Intent.ACTION_SCREEN_ON -> {
                     val wasPlaying = getSharedPreferences("relax_audio", MODE_PRIVATE)
                         .getBoolean("was_playing", false)
                     // On unlock we resume only if the user had not explicitly
                     // tapped pause. If they did (was_playing=false), respect
-                    // that. The "user is on home screen" auto-resume is
+                    // that. The "user is on home screen" auto-resume is also
                     // handled by the wallpaper visibility receiver below.
                     if (wasPlaying && (player?.isPlaying != true)) {
                         appVisible = true
@@ -82,19 +83,18 @@ class RelaxAudioService : Service() {
     private val visibilityReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context, intent: Intent) {
             appVisible = intent.getBooleanExtra("visible", true)
-            // CRITICAL (user req): do NOT pause when visibility goes false.
-            // The user expects music to keep playing while they use other
-            // apps — like Spotify or any other audio player. We only auto-
-            // resume on visible=true so returning to the home screen with
-            // our wallpaper installed brings playback back if it was paused
-            // (e.g. by a transient focus loss).
+            // We do NOT pause when the user goes to another app — music
+            // should keep playing in the background like a normal audio
+            // player. SCREEN_OFF still pauses (handled above).
+            //
+            // On returning to the home screen (visible=true) we auto-
+            // resume IF the user was playing before (was_playing=true).
+            // We must respect explicit user pauses: if they tapped pause,
+            // was_playing=false and we leave it paused.
             if (appVisible) {
                 val prefs = getSharedPreferences("relax_audio", MODE_PRIVATE)
-                val hasLast = !prefs.getString("last_url", null).isNullOrBlank()
-                if (hasLast && (player?.isPlaying != true)) {
-                    // Force was_playing back to true so subsequent SCREEN_OFF
-                    // / SCREEN_ON cycles also resume cleanly.
-                    prefs.edit().putBoolean("was_playing", true).apply()
+                val wasPlaying = prefs.getBoolean("was_playing", false)
+                if (wasPlaying && (player?.isPlaying != true)) {
                     fadeInAndResume()
                 }
             }
