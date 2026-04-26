@@ -97,10 +97,11 @@ open class RelaxWidgetBase(private val size: String) : AppWidgetProvider() {
 
     private fun refreshAll(ctx: Context) {
         val mgr = AppWidgetManager.getInstance(ctx)
-        listOf(RelaxWidgetSmall::class.java, RelaxWidgetMedium::class.java, RelaxWidgetLarge::class.java)
+        // Large widget removed per req #9 — only Small + Medium are available.
+        listOf(RelaxWidgetSmall::class.java, RelaxWidgetMedium::class.java)
             .forEach { clz ->
                 val ids = mgr.getAppWidgetIds(ComponentName(ctx, clz))
-                val sz = when (clz.simpleName) { "RelaxWidgetSmall" -> "small"; "RelaxWidgetLarge" -> "large"; else -> "medium" }
+                val sz = when (clz.simpleName) { "RelaxWidgetSmall" -> "small"; else -> "medium" }
                 ids.forEach { id -> updateWidget(ctx, mgr, id, sz) }
             }
     }
@@ -117,7 +118,6 @@ open class RelaxWidgetBase(private val size: String) : AppWidgetProvider() {
         fun updateWidget(ctx: Context, mgr: AppWidgetManager, id: Int, size: String) {
             val layout = when (size) {
                 "small" -> R.layout::class.java.getField("relax_widget_small").getInt(null)
-                "large" -> R.layout::class.java.getField("relax_widget_large").getInt(null)
                 else -> R.layout::class.java.getField("relax_widget_medium").getInt(null)
             }
             val views = RemoteViews(ctx.packageName, layout)
@@ -173,7 +173,6 @@ open class RelaxWidgetBase(private val size: String) : AppWidgetProvider() {
 
 class RelaxWidgetSmall : RelaxWidgetBase("small")
 class RelaxWidgetMedium : RelaxWidgetBase("medium")
-class RelaxWidgetLarge : RelaxWidgetBase("large")
 `;
 
 const MODULE_KT = `package ${PKG}.native
@@ -196,10 +195,10 @@ class RelaxWidgetModule(ctx: ReactApplicationContext) : ReactContextBaseJavaModu
         c.getSharedPreferences("relax_widget", Context.MODE_PRIVATE).edit()
             .putString("mode", mode).apply()
         val mgr = AppWidgetManager.getInstance(c)
-        listOf(RelaxWidgetSmall::class.java, RelaxWidgetMedium::class.java, RelaxWidgetLarge::class.java)
+        listOf(RelaxWidgetSmall::class.java, RelaxWidgetMedium::class.java)
             .forEach { clz ->
                 val ids = mgr.getAppWidgetIds(ComponentName(c, clz))
-                val sz = when (clz.simpleName) { "RelaxWidgetSmall" -> "small"; "RelaxWidgetLarge" -> "large"; else -> "medium" }
+                val sz = when (clz.simpleName) { "RelaxWidgetSmall" -> "small"; else -> "medium" }
                 ids.forEach { id -> RelaxWidgetBase.updateWidget(c, mgr, id, sz) }
             }
         promise.resolve(true)
@@ -252,7 +251,7 @@ class RelaxWidgetModule(ctx: ReactApplicationContext) : ReactContextBaseJavaModu
 
 const widgetLayout = (variant) => {
   const showPrevNext = variant !== "small";
-  const showMode = variant === "large" || variant === "medium";
+  const showMode = variant === "medium";
   // Polished layout: title centered, controls in a single row, no volume
   // slider (per req #8). The frosty dark-green background mirrors the
   // mockups in design-screenshots.zip.
@@ -306,9 +305,7 @@ const widgetLayout = (variant) => {
 const widgetInfo = (variant) => {
   const [minW, minH, cellW, cellH] = variant === "small"
     ? [110, 40, 2, 1]
-    : variant === "large"
-      ? [250, 180, 4, 3]
-      : [180, 110, 3, 2];
+    : [180, 110, 3, 2];
   return `<?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:minWidth="${minW}dp"
@@ -352,7 +349,7 @@ const withAppWidgetManifest = (config) =>
   withAndroidManifest(config, (config) => {
     const app = AndroidConfig.Manifest.getMainApplicationOrThrow(config.modResults);
     app["receiver"] = app["receiver"] || [];
-    [["small", "RelaxWidgetSmall"], ["medium", "RelaxWidgetMedium"], ["large", "RelaxWidgetLarge"]].forEach(
+    [["small", "RelaxWidgetSmall"], ["medium", "RelaxWidgetMedium"]].forEach(
       ([size, cls]) => {
         if (!app["receiver"].some((r) => r.$["android:name"] === `.widget.${cls}`)) {
           app["receiver"].push({
@@ -390,7 +387,7 @@ const withAppWidgetFiles = (config) =>
       const root = config.modRequest.projectRoot;
       writeNativeSource(root, "widget/RelaxWidget.kt", PROVIDER_KT);
       writeNativeSource(root, "native/RelaxWidgetModule.kt", MODULE_KT);
-      ["small", "medium", "large"].forEach((v) => {
+      ["small", "medium"].forEach((v) => {
         writeResource(root, `layout/relax_widget_${v}.xml`, widgetLayout(v));
         writeResource(root, `xml/relax_widget_${v}_info.xml`, widgetInfo(v));
       });

@@ -1,9 +1,8 @@
 import React, { useState } from "react";
-import { ScrollView, View, Text, StyleSheet, Pressable, Linking, Modal, Alert } from "react-native";
-import { SmoothSlider } from "@/components/SmoothSlider";
+import Constants from "expo-constants";
+import { ScrollView, View, Text, StyleSheet, Pressable, Linking, Modal } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
-import i18n from "i18next";
 import { SUPPORTED_LANGUAGES, applyLanguage } from "@/i18n";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BackgroundGradient } from "@/components/BackgroundGradient";
@@ -36,6 +35,9 @@ export default function SettingsScreen() {
   const [a11yRationale, setA11yRationale] = useState(false);
   const [termsOpen, setTermsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  // Language menu starts collapsed per req — most users only set it once.
+  const [langOpen, setLangOpen] = useState(false);
+  const currentLang = SUPPORTED_LANGUAGES.find((l) => l.code === app.language) ?? SUPPORTED_LANGUAGES[0];
 
   const pickLanguage = async (l: string) => {
     // persist choice (system | en | ru | es | pt | de | fr | it | tr | ja | zh | ar)
@@ -57,37 +59,31 @@ export default function SettingsScreen() {
         <Text style={styles.h1}>{t("settings.title")}</Text>
 
         <GlassCard>
-          <Text style={styles.sectionTitle}>{t("settings.language")}</Text>
-          <Text style={styles.body}>{t("settings.languageHint")}</Text>
-          <View style={[styles.row, { marginTop: 8, flexWrap: "wrap", gap: 6 }]}>
-            {SUPPORTED_LANGUAGES.map((lang) => (
-              <Pressable
-                key={lang.code}
-                onPress={() => pickLanguage(lang.code)}
-                style={[styles.langChip, app.language === lang.code && styles.langChipActive]}
-              >
-                <Text style={[styles.langChipText, app.language === lang.code && styles.langChipTextActive]}>
-                  {lang.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </GlassCard>
-
-        <GlassCard>
-          <Text style={styles.sectionTitle}>{t("settings.uiOpacity")}</Text>
-          <Text style={styles.body}>{t("settings.uiOpacityHint")}</Text>
-          <Text style={[styles.body, { marginTop: 6 }]}>{Math.round(app.uiOpacity * 100)}%</Text>
-          <SmoothSlider
-            minimumValue={0}
-            maximumValue={1}
-            value={app.uiOpacity}
-            step={0.01}
-            minimumTrackTintColor={theme.colors.accent}
-            maximumTrackTintColor={theme.colors.border}
-            thumbTintColor={theme.colors.accent}
-            onSlidingComplete={(v) => app.setUiOpacity(v)}
-          />
+          <Pressable onPress={() => setLangOpen((v) => !v)} style={styles.collapseHead}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.sectionTitle}>{t("settings.language")}</Text>
+              <Text style={styles.body}>{currentLang.label}</Text>
+            </View>
+            <Ionicons name={langOpen ? "chevron-up" : "chevron-down"} size={20} color={theme.colors.accent} />
+          </Pressable>
+          {langOpen && (
+            <>
+              <Text style={[styles.body, { marginTop: 6 }]}>{t("settings.languageHint")}</Text>
+              <View style={[styles.row, { marginTop: 8, flexWrap: "wrap", gap: 6 }]}>
+                {SUPPORTED_LANGUAGES.map((lang) => (
+                  <Pressable
+                    key={lang.code}
+                    onPress={() => pickLanguage(lang.code)}
+                    style={[styles.langChip, app.language === lang.code && styles.langChipActive]}
+                  >
+                    <Text style={[styles.langChipText, app.language === lang.code && styles.langChipTextActive]}>
+                      {lang.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </>
+          )}
         </GlassCard>
 
         <GlassCard>
@@ -156,7 +152,7 @@ export default function SettingsScreen() {
           </Pressable>
         </GlassCard>
 
-        <Text style={styles.footer}>Relax Sound Live Wallpapers v2.6</Text>
+        <Text style={styles.footer}>Relax Sound Live Wallpapers v{Constants.expoConfig?.version ?? "2.8.0"}</Text>
       </ScrollView>
 
       {/* Accessibility rationale modal — Google Play requires apps to
@@ -204,7 +200,7 @@ export default function SettingsScreen() {
             </View>
             <ScrollView style={{ flex: 1, marginTop: 14 }}>
               <Text style={styles.aboutBig}>Relax Sound Live Wallpapers</Text>
-              <Text style={styles.body}>Version 2.6 • Nature Engine</Text>
+              <Text style={styles.body}>Version {Constants.expoConfig?.version ?? "2.8.0"} • Nature Engine</Text>
               <View style={{ height: 14 }} />
               <Text style={styles.modalBody}>{t("settings.aboutBody")}</Text>
               <View style={{ height: 14 }} />
@@ -261,5 +257,6 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.accentGlow
   },
   langChipText: { color: theme.colors.textSecondary, fontSize: theme.font.size.sm, fontWeight: "600" },
-  langChipTextActive: { color: theme.colors.textPrimary }
+  langChipTextActive: { color: theme.colors.textPrimary },
+  collapseHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }
 });

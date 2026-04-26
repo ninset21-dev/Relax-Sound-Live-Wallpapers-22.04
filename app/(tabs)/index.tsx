@@ -20,6 +20,7 @@ export default function HomeScreen() {
   const app = useApp();
   const [gpPhotos, setGpPhotos] = useState<GPhoto[]>([]);
   const [gpLoading, setGpLoading] = useState(false);
+  const [gpHintCollapsed, setGpHintCollapsed] = useState(false);
   const [gpSelected, setGpSelected] = useState<Set<string>>(new Set()); // holds FULL URLs
   const [libSelected, setLibSelected] = useState<Set<string>>(new Set());
   const [gpFullscreen, setGpFullscreen] = useState(false);
@@ -384,6 +385,23 @@ export default function HomeScreen() {
             </Text>
           </View>
           <Text style={styles.sectionBody}>{t("home.googlePhotosHint")}</Text>
+          {/* Loading hint with collapse (req #13). Shown only while photos
+              are still being fetched so the user understands the brief delay. */}
+          {gpLoading && !gpHintCollapsed && (
+            <View style={styles.gpLoadingHint}>
+              <Ionicons name="information-circle-outline" size={16} color={theme.colors.accentGlow} />
+              <Text style={styles.gpLoadingHintText}>{t("home.gpLoadingNotice")}</Text>
+              <Pressable hitSlop={10} onPress={() => setGpHintCollapsed(true)}>
+                <Ionicons name="chevron-up" size={16} color={theme.colors.textSecondary} />
+              </Pressable>
+            </View>
+          )}
+          {gpLoading && gpHintCollapsed && (
+            <Pressable onPress={() => setGpHintCollapsed(false)} style={styles.gpLoadingMini}>
+              <Ionicons name="hourglass-outline" size={14} color={theme.colors.accentGlow} />
+              <Text style={styles.gpLoadingMiniText}>{t("home.gpLoadingMini")}</Text>
+            </Pressable>
+          )}
           <View style={[styles.row, { marginTop: 10, gap: 8 }]}>
             <PrimaryButton
               label={gpFullscreen ? t("home.gpHide") : t("home.gpOpen", { count: gpPhotos.length })}
@@ -570,6 +588,10 @@ const styles = StyleSheet.create({
   chipText: { color: theme.colors.accent, fontSize: theme.font.size.xs, textTransform: "capitalize" },
   chipTextActive: { color: "#0b1f14", fontWeight: "700" },
   subDim: { color: theme.colors.textMuted, fontSize: theme.font.size.xs },
+  gpLoadingHint: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, backgroundColor: "rgba(34,197,94,0.08)", borderWidth: 1, borderColor: theme.colors.border },
+  gpLoadingHintText: { color: theme.colors.textSecondary, fontSize: 12, flex: 1, lineHeight: 17 },
+  gpLoadingMini: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", marginTop: 8, paddingHorizontal: 10, paddingVertical: 6, borderRadius: theme.radii.pill, backgroundColor: "rgba(34,197,94,0.10)" },
+  gpLoadingMiniText: { color: theme.colors.accent, fontSize: 11, fontWeight: "600" },
   linkText: { color: theme.colors.accent, fontSize: 13, fontWeight: "600" },
   smallDanger: {
     flexDirection: "row", alignItems: "center", gap: 4,

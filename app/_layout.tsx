@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import { Stack } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -7,7 +7,8 @@ import * as SystemUI from "expo-system-ui";
 import { AppProvider, useApp } from "@/contexts/AppContext";
 import "@/i18n";
 import { applyLanguage } from "@/i18n";
-import { theme } from "@/theme/theme";
+import { AnimatedSplash } from "@/components/AnimatedSplash";
+import { OnboardingModal } from "@/components/OnboardingModal";
 
 const LanguageBridge: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const app = useApp();
@@ -22,6 +23,7 @@ const LanguageBridge: React.FC<{ children: React.ReactNode }> = ({ children }) =
 };
 
 export default function RootLayout() {
+  const [splashDone, setSplashDone] = useState(false);
   useEffect(() => {
     // Activity is translucent (see plugins/withTransparentActivity.js) — keep
     // the system-UI window background fully transparent so the launcher
@@ -37,6 +39,8 @@ export default function RootLayout() {
             <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "transparent" } }}>
               <Stack.Screen name="(tabs)" />
             </Stack>
+            {!splashDone && <AnimatedSplash onDone={() => setSplashDone(true)} />}
+            {splashDone && <OnboardingModal />}
           </LanguageBridge>
         </AppProvider>
       </SafeAreaProvider>

@@ -246,7 +246,42 @@ class RelaxAudioService : Service() {
         p.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) { broadcastState() }
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                Log.e(TAG, "player error", error); pauseInternal()
+                Log.e(TAG, "player error", error)
+                // Req #14: auto-reconnect on poor internet. We retry the same
+                // last_url up to 5 times with exponential backoff (1.5s,
+                // 3s, 6s, 8s, 8s) instead of pausing immediately. The user
+                // sees the music briefly stutter and then resume on its own
+                // without having to tap anything. We track attempt count in
+                // SharedPreferences so re-entering this branch (e.g. via
+                // another connection drop seconds later) keeps escalating
+                // the delay rather than spamming reconnect attempts.
+                val prefs = getSharedPreferences("relax_audio", MODE_PRIVATE)
+                val lastUrl = prefs.getString("last_url", null)
+                val attempts = prefs.getInt("reconnect_attempts", 0)
+                if (!lastUrl.isNullOrBlank() && attempts < 5) {
+                    val delaySec = when (attempts) {
+                        0 -> 1500L
+                        1 -> 3000L
+                        2 -> 6000L
+                        else -> 8000L
+                    }
+                    prefs.edit().putInt("reconnect_attempts", attempts + 1).apply()
+                    Log.w(TAG, "auto-reconnect attempt #${'$'}{attempts + 1} in ${'$'}{delaySec}ms")
+                    handler.postDelayed({
+                        try { play(lastUrl, gapless = true) } catch (_: Throwable) {}
+                    }, delaySec)
+                } else {
+                    // Reset and give up — broadcast paused state.
+                    prefs.edit().putInt("reconnect_attempts", 0).apply()
+                    pauseInternal()
+                }
+            }
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_READY) {
+                    // Successful prepare \u2014 reset reconnect counter.
+                    getSharedPreferences("relax_audio", MODE_PRIVATE).edit()
+                        .putInt("reconnect_attempts", 0).apply()
+                }
             }
         })
     }

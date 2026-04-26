@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ScrollView, View, Text, StyleSheet, Pressable, Alert } from "react-native";
 import { SmoothSlider } from "@/components/SmoothSlider";
 import { Ionicons } from "@expo/vector-icons";
@@ -10,8 +11,10 @@ import { GlassCard } from "@/components/GlassCard";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { theme } from "@/theme/theme";
 import { useApp, Track } from "@/contexts/AppContext";
-import { GENRES, popularByGenre, probeStations, Station } from "@/services/radio";
+import { GENRES, popularByGenre, probeStations, Station, randomFromAllGenres } from "@/services/radio";
 import { Audio } from "@/native";
+
+const FAV_STORAGE_KEY = "relax.favorites.v1";
 
 export default function MusicScreen() {
   const { t } = useTranslation();
@@ -21,6 +24,11 @@ export default function MusicScreen() {
   const [stations, setStations] = useState<Station[]>([]);
   const [loading, setLoading] = useState(false);
   const [trackSel, setTrackSel] = useState<Set<string>>(new Set());
+  const [favorites, setFavorites] = useState<Station[]>([]);
+  const [showFavOnly, setShowFavOnly] = useState(false);
+  // currentStationUrl reflects the URL we attempted to play last; used for
+  // highlighting the active row regardless of how the engine renamed it.
+  const currentStationUrl = app.currentTrack?.uri ?? null;
   // Collapsible state for radio/my-music sections (req #2).
   const [radioOpen, setRadioOpen] = useState(true);
   const [musicOpen, setMusicOpen] = useState(true);
@@ -66,6 +74,47 @@ export default function MusicScreen() {
   }, [app.quality]);
 
   useEffect(() => { loadGenre(genre); }, []);
+
+  // Load favorites from AsyncStorage once on mount.
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(FAV_STORAGE_KEY);
+        if (raw) setFavorites(JSON.parse(raw));
+      } catch {}
+    })();
+  }, []);
+
+  const persistFavorites = useCallback(async (next: Station[]) => {
+    setFavorites(next);
+    try { await AsyncStorage.setItem(FAV_STORAGE_KEY, JSON.stringify(next)); } catch {}
+  }, []);
+
+  const isFavorite = (s: Station) => favorites.some((f) => f.stationuuid === s.stationuuid);
+
+  const toggleFavorite = useCallback((s: Station) => {
+    if (favorites.some((f) => f.stationuuid === s.stationuuid)) {
+      persistFavorites(favorites.filter((f) => f.stationuuid !== s.stationuuid));
+    } else {
+      persistFavorites([s, ...favorites].slice(0, 200));
+    }
+  }, [favorites, persistFavorites]);
+
+  // Random across all genres — fetches a curated random pool and starts one.
+  const playRandomAcrossGenres = useCallback(async () => {
+    setLoading(true);
+    try {
+      const pool = await randomFromAllGenres(40);
+      if (pool.length === 0) return Alert.alert(t("music.radio"), t("music.noStations", { genre: "…" }));
+      const pick = pool[Math.floor(Math.random() * pool.length)];
+      setStations(pool);
+      setGenre("✨");
+      const items = pool.map((st) => ({ uri: st.url_resolved || st.url, title: st.name.trim() }));
+      const idx = Math.max(0, items.findIndex((it) => it.uri === (pick.url_resolved || pick.url)));
+      Audio.setPlaylist(items, idx).catch(() => {});
+      app.play({ uri: pick.url_resolved || pick.url, title: pick.name.trim() });
+    } finally { setLoading(false); }
+  }, [app, t]);
 
   const playStation = (s: Station) => {
     // Replace the native "playlist" with the currently visible station list
@@ -237,16 +286,71 @@ export default function MusicScreen() {
             ))}
           </ScrollView>
           {loading && <Text style={styles.body}>…</Text>}
-          {!loading && stations.map((s) => (
-            <Pressable key={s.stationuuid} style={styles.station} onPress={() => playStation(s)}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.trackName} numberOfLines={1}>{s.name.trim()}</Text>
-                <Text style={styles.body} numberOfLines={1}>{s.country} • {s.codec} • {s.bitrate}kbps</Text>
-              </View>
-              <Ionicons name="play" size={20} color={theme.colors.accent} />
+          {/* Random + favorites toggle row (req #16). */}
+          <View style={[styles.row, { gap: 6, marginTop: 6, flexWrap: "wrap" }]}>
+            <PrimaryButton
+              label={t("music.randomAll")}
+              icon="shuffle"
+              variant="secondary"
+              onPress={playRandomAcrossGenres}
+              compact
+            />
+            <Pressable
+              onPress={() => setShowFavOnly((v) => !v)}
+              style={[styles.chip, showFavOnly && styles.chipActive]}
+            >
+              <Ionicons
+                name={showFavOnly ? "star" : "star-outline"}
+                size={14}
+                color={showFavOnly ? "#0b1f14" : theme.colors.accent}
+              />
+              <Text style={[styles.chipText, showFavOnly && styles.chipTextActive, { marginLeft: 4 }]}>
+                {t("music.favorites")} ({favorites.length})
+              </Text>
             </Pressable>
-          ))}
-          {!loading && stations.length === 0 && <Text style={styles.body}>{t("music.noStations", { genre })}</Text>}
+          </View>
+          {!loading && (showFavOnly ? favorites : stations).map((s) => {
+            const url = s.url_resolved || s.url;
+            const active = currentStationUrl === url;
+            const fav = isFavorite(s);
+            // Status indicator (req #4): playing / paused / stalled. Stalled
+            // means we asked to play it but isPlaying is false — i.e. the
+            // stream stopped delivering audio (network/server issue).
+            const status = active
+              ? app.isPlaying ? t("music.statusPlaying") : t("music.statusStalled")
+              : null;
+            return (
+              <Pressable
+                key={s.stationuuid}
+                style={[styles.station, active && styles.stationActive]}
+                onPress={() => playStation(s)}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.trackName, active && { color: theme.colors.accentGlow }]} numberOfLines={1}>
+                    {s.name.trim()}
+                  </Text>
+                  <Text style={styles.body} numberOfLines={1}>
+                    {s.country} • {s.codec} • {s.bitrate}kbps
+                    {status ? `  •  ${status}` : ""}
+                  </Text>
+                </View>
+                <Pressable hitSlop={10} onPress={() => toggleFavorite(s)} style={{ paddingHorizontal: 6 }}>
+                  <Ionicons
+                    name={fav ? "star" : "star-outline"}
+                    size={20}
+                    color={fav ? theme.colors.accentGlow : theme.colors.textSecondary}
+                  />
+                </Pressable>
+                <Ionicons
+                  name={active && app.isPlaying ? "radio" : "play"}
+                  size={20}
+                  color={active ? theme.colors.accentGlow : theme.colors.accent}
+                />
+              </Pressable>
+            );
+          })}
+          {!loading && !showFavOnly && stations.length === 0 && <Text style={styles.body}>{t("music.noStations", { genre })}</Text>}
+          {!loading && showFavOnly && favorites.length === 0 && <Text style={styles.body}>{t("music.noFavorites")}</Text>}
           </>}
         </GlassCard>
       </ScrollView>
@@ -279,5 +383,6 @@ const styles = StyleSheet.create({
   ghostBtnText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: "600" },
   trackName: { color: theme.colors.textPrimary, fontSize: theme.font.size.sm, flex: 1 },
   station: { flexDirection: "row", alignItems: "center", paddingVertical: 10, gap: 8, borderTopWidth: 1, borderTopColor: theme.colors.border },
+  stationActive: { backgroundColor: "rgba(34,197,94,0.12)", borderRadius: 10 },
   collapseHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }
 });

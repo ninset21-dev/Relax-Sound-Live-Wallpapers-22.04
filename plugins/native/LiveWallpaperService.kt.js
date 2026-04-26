@@ -268,11 +268,30 @@ class RelaxWallpaperService : WallpaperService() {
                     val vol = if (audioEnabled)
                         prefs.getFloat("wallpaper_video_volume", 0.7f).coerceIn(0f, 1f)
                     else 0f
+                    // Req #3: video\u2192photo\u2192video regression fix. After we drew
+                    // a still image with Canvas (lockCanvas/unlockCanvasAndPost),
+                    // the SurfaceHolder's surface is stuck in CPU-producer mode
+                    // and MediaPlayer.setSurface() will silently fail to render
+                    // any frames. Two-step recovery:
+                    //   1) Clear the canvas with a transparent fill so the
+                    //      buffer queue is not holding stale image content.
+                    //   2) Use setDisplay(holder) instead of setSurface(surface)
+                    //      \u2014 setDisplay accepts the SurfaceHolder and properly
+                    //      reattaches the producer side, while setSurface keeps
+                    //      a ref to the same Surface object that may already be
+                    //      consumed.
+                    try {
+                        val c = holder.lockCanvas()
+                        if (c != null) {
+                            c.drawColor(0, android.graphics.PorterDuff.Mode.CLEAR)
+                            holder.unlockCanvasAndPost(c)
+                        }
+                    } catch (_: Throwable) {}
                     mediaPlayer = MediaPlayer().apply {
                         setDataSource(this@RelaxWallpaperService, Uri.parse(videoUri))
                         isLooping = true
                         setVolume(vol, vol)
-                        setSurface(holder.surface)
+                        setDisplay(holder)
                         prepare()
                         start()
                     }

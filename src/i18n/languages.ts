@@ -89,6 +89,8 @@ export const en: Dict = {
       gpImportBtnFull: "Import ({{count}})",
       gpPickPhotos: "Pick photos",
       gpLoading: "Loading...",
+      gpLoadingNotice: "Please wait — photos are loading from your album. You can continue using the app, the import will run in the background.",
+      gpLoadingMini: "Loading photos…",
       gpEmptyAlbum: "Album is empty or unreachable.",
       pickAlbum: "Pick an album",
       pickAlbumHint: "All photos and videos from the chosen album will be added to the library.",
@@ -116,7 +118,12 @@ export const en: Dict = {
       selectAll: "Select all",
       deleteSelected: "Delete selected",
       noStations: "No stations for \"{{genre}}\".",
-      qualityHint: "Auto picks bitrate based on connection: WiFi/5G — high, 4G — medium, 3G/2G — low."
+      qualityHint: "Auto picks bitrate based on connection: WiFi/5G — high, 4G — medium, 3G/2G — low.",
+      randomAll: "Random across genres",
+      favorites: "Favorites",
+      noFavorites: "No favorites yet — tap the star next to a station.",
+      statusPlaying: "Playing",
+      statusStalled: "Stalled — reconnecting…"
     },
     effects: {
       title: "Visual Effects",
@@ -187,9 +194,28 @@ export const en: Dict = {
       on: "On", off: "Off", seconds: "sec", minutes: "min",
       delete: "Delete", confirm: "Confirm",
       apply: "Apply", close: "Close",
+      next: "Next", back: "Back",
       needAccess: "Permission required",
       needAccessGallery: "Please grant access to your media library.",
       added: "Added"
+    },
+    onboarding: {
+      skip: "Skip", done: "Got it",
+      widgetsTitle: "Floating & home-screen widgets",
+      widgetsBody: "Use the floating widget and the home-screen widgets to control playback (play/pause, next/previous, volume) without opening the app. The floating widget needs the system 'Display over other apps' permission.",
+      openOverlayPerm: "Open 'Overlay' permission",
+      musicTitle: "Music & radio everywhere",
+      musicBody: "Set background music from your phone or pick from hundreds of online radio stations. Music keeps playing as a phone-wide audio player even when you switch to other apps.",
+      effectsTitle: "Relaxing visual effects",
+      effectsBody: "Snow, rain, leaves, fireflies, plasma and more — all with realistic physics, wind and touch reactions. Effects play across the app and on the live wallpaper.",
+      doubleTapTitle: "Double-tap to lock",
+      doubleTapBody: "Tap the wallpaper twice to instantly lock the screen. Requires Android Accessibility permission — we only use it to perform the lock gesture, no data is collected.",
+      openA11yPerm: "Open Accessibility settings",
+      batteryTitle: "Keep music playing",
+      batteryBody: "Some manufacturers (Xiaomi, Huawei, Samsung etc.) aggressively kill background apps. To get reliable auto-resume, allow autostart and disable battery optimisation for Relax Sound.",
+      openBatteryPerm: "Open battery settings",
+      networkTitle: "Radio on weak networks",
+      networkBody: "When the network drops, Relax Sound automatically reconnects up to 5 times with exponential backoff so your radio doesn't stay silent."
     }
   }
 };
@@ -256,6 +282,8 @@ export const ru: Dict = {
       gpImportBtnFull: "Импортировать ({{count}})",
       gpPickPhotos: "Выберите фото",
       gpLoading: "Загружается...",
+      gpLoadingNotice: "Подождите — фотографии загружаются из вашего альбома. Можно продолжать пользоваться приложением, загрузка идёт в фоне.",
+      gpLoadingMini: "Идёт загрузка…",
       gpEmptyAlbum: "Альбом пуст или недоступен.",
       pickAlbum: "Выберите альбом",
       pickAlbumHint: "Все фото и видео из выбранного альбома будут добавлены в библиотеку.",
@@ -279,7 +307,12 @@ export const ru: Dict = {
       selectAll: "Выбрать всё",
       deleteSelected: "Удалить выбранное",
       noStations: "Нет станций для «{{genre}}».",
-      qualityHint: "Автокачество выбирает битрейт по скорости сети: WiFi/5G — высокое, 4G — среднее, 3G/2G — низкое."
+      qualityHint: "Автокачество выбирает битрейт по скорости сети: WiFi/5G — высокое, 4G — среднее, 3G/2G — низкое.",
+      randomAll: "Случайные жанры",
+      favorites: "Избранное",
+      noFavorites: "Пусто — нажмите ★ рядом со станцией.",
+      statusPlaying: "Играет",
+      statusStalled: "Завис — переподключение…"
     },
     effects: {
       title: "Визуальные эффекты",
@@ -342,9 +375,28 @@ export const ru: Dict = {
       save: "Сохранить", cancel: "Отмена", yes: "Да", no: "Нет",
       chooseAll: "Добавить всё", on: "Вкл", off: "Выкл", seconds: "сек", minutes: "мин",
       delete: "Удалить", confirm: "Подтвердить", apply: "Применить", close: "Закрыть",
+      next: "Далее", back: "Назад",
       needAccess: "Нужен доступ",
       needAccessGallery: "Разрешите приложению доступ к галерее.",
       added: "Добавлено"
+    },
+    onboarding: {
+      skip: "Пропустить", done: "Понятно",
+      widgetsTitle: "Плавающий виджет и виджеты на рабочем столе",
+      widgetsBody: "Управляйте воспроизведением (старт/пауза, переключение треков, громкость) с помощью плавающего виджета и виджетов на рабочем столе, не открывая приложение. Для плавающего виджета нужно разрешение «Поверх других приложений».",
+      openOverlayPerm: "Открыть разрешение «Поверх»",
+      musicTitle: "Музыка и радио везде",
+      musicBody: "Установите фоновую музыку с телефона или выберите из сотен онлайн-радиостанций. Музыка продолжает играть, даже когда вы открываете другие приложения.",
+      effectsTitle: "Расслабляющие эффекты",
+      effectsBody: "Снег, дождь, листья, светлячки, плазма и другое — с физикой, ветром и реакцией на касания. Эффекты идут по всему приложению и на живых обоях.",
+      doubleTapTitle: "Двойное касание — блокировка",
+      doubleTapBody: "Дважды коснитесь обоев, чтобы мгновенно заблокировать экран. Нужно разрешение Accessibility — мы используем его только для блокировки, никакие данные не собираются.",
+      openA11yPerm: "Открыть Accessibility",
+      batteryTitle: "Чтобы музыка не пропадала",
+      batteryBody: "Некоторые производители (Xiaomi, Huawei, Samsung) агрессивно убивают приложения в фоне. Разрешите автозапуск и отключите оптимизацию батареи для Relax Sound.",
+      openBatteryPerm: "Настройки батареи",
+      networkTitle: "Радио на слабом интернете",
+      networkBody: "Если интернет пропадает, Relax Sound автоматически переподключается до 5 раз с возрастающим интервалом — радио не будет молчать."
     }
   }
 };

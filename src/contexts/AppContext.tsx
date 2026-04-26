@@ -102,7 +102,10 @@ const Default: AppState_ = {
   a11yEnabled: false,
   liveWallpaperActive: false,
   repeatMode: "off",
-  uiOpacity: 1,
+  // Default to fully transparent app per req — the launcher / live wallpaper
+  // shows through the entire UI. Users can no longer tune this since the
+  // UI Opacity tile was removed in v2.8.0; it's just a permanent passthrough.
+  uiOpacity: 0,
   wallpaperTarget: "both"
 };
 
@@ -126,6 +129,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (raw) {
         try {
           const parsed = JSON.parse(raw);
+          // Force uiOpacity=0 always — the UI Opacity tile was removed in
+          // v2.8.0 (req #7) and the app is meant to render fully transparent
+          // so the launcher / live wallpaper shows through. We strip any
+          // legacy persisted value before re-hydrating.
+          if (parsed && typeof parsed === "object") parsed.uiOpacity = 0;
           setState((p) => ({ ...p, ...parsed }));
           // Apply persisted language to i18next right after hydrate so all
           // screens render in the correct language before first paint.
