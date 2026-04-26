@@ -515,7 +515,7 @@ export default function HomeScreen() {
                   <Ionicons name="folder-outline" size={20} color={theme.colors.accent} />
                   <View style={{ flex: 1, marginLeft: 12 }}>
                     <Text style={styles.albumTitle}>{a.title}</Text>
-                    <Text style={styles.albumCount}>{a.assetCount} файлов</Text>
+                    <Text style={styles.albumCount}>{a.assetCount} {t("home.filesLabel")}</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
                 </Pressable>
