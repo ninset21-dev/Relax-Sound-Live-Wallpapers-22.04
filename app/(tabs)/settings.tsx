@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { ScrollView, View, Text, StyleSheet, Pressable, Linking, Modal, Alert } from "react-native";
-import { SmoothSlider } from "@/components/SmoothSlider";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
 import i18n from "i18next";
@@ -36,6 +35,8 @@ export default function SettingsScreen() {
   const [a11yRationale, setA11yRationale] = useState(false);
   const [termsOpen, setTermsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  // req #8: Language menu collapsed by default — expand on tap.
+  const [langOpen, setLangOpen] = useState(false);
 
   const pickLanguage = async (l: string) => {
     // persist choice (system | en | ru | es | pt | de | fr | it | tr | ja | zh | ar)
@@ -57,38 +58,36 @@ export default function SettingsScreen() {
         <Text style={styles.h1}>{t("settings.title")}</Text>
 
         <GlassCard>
-          <Text style={styles.sectionTitle}>{t("settings.language")}</Text>
-          <Text style={styles.body}>{t("settings.languageHint")}</Text>
-          <View style={[styles.row, { marginTop: 8, flexWrap: "wrap", gap: 6 }]}>
-            {SUPPORTED_LANGUAGES.map((lang) => (
-              <Pressable
-                key={lang.code}
-                onPress={() => pickLanguage(lang.code)}
-                style={[styles.langChip, app.language === lang.code && styles.langChipActive]}
-              >
-                <Text style={[styles.langChipText, app.language === lang.code && styles.langChipTextActive]}>
-                  {lang.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+          {/* req #8: collapsible language picker — collapsed by default. */}
+          <Pressable onPress={() => setLangOpen((v) => !v)} style={styles.collapseHead}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.sectionTitle}>{t("settings.language")}</Text>
+              <Text style={styles.body}>
+                {(SUPPORTED_LANGUAGES.find((l) => l.code === app.language)?.label) ?? t("settings.language")}
+              </Text>
+            </View>
+            <Ionicons name={langOpen ? "chevron-up" : "chevron-down"} size={20} color={theme.colors.accent} />
+          </Pressable>
+          {langOpen && (
+            <View style={[styles.row, { marginTop: 8, flexWrap: "wrap", gap: 6 }]}>
+              {SUPPORTED_LANGUAGES.map((lang) => (
+                <Pressable
+                  key={lang.code}
+                  onPress={() => pickLanguage(lang.code)}
+                  style={[styles.langChip, app.language === lang.code && styles.langChipActive]}
+                >
+                  <Text style={[styles.langChipText, app.language === lang.code && styles.langChipTextActive]}>
+                    {lang.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
         </GlassCard>
 
-        <GlassCard>
-          <Text style={styles.sectionTitle}>{t("settings.uiOpacity")}</Text>
-          <Text style={styles.body}>{t("settings.uiOpacityHint")}</Text>
-          <Text style={[styles.body, { marginTop: 6 }]}>{Math.round(app.uiOpacity * 100)}%</Text>
-          <SmoothSlider
-            minimumValue={0}
-            maximumValue={1}
-            value={app.uiOpacity}
-            step={0.01}
-            minimumTrackTintColor={theme.colors.accent}
-            maximumTrackTintColor={theme.colors.border}
-            thumbTintColor={theme.colors.accent}
-            onSlidingComplete={(v) => app.setUiOpacity(v)}
-          />
-        </GlassCard>
+        {/* req #9: removed standalone "UI/widget transparency" tile.
+            Transparency is still controlled via the Effects screen
+            (uiOpacity slider on the live wallpaper card). */}
 
         <GlassCard>
           <Text style={styles.sectionTitle}>{t("settings.doubleTapLock")}</Text>
@@ -261,5 +260,6 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.accentGlow
   },
   langChipText: { color: theme.colors.textSecondary, fontSize: theme.font.size.sm, fontWeight: "600" },
-  langChipTextActive: { color: theme.colors.textPrimary }
+  langChipTextActive: { color: theme.colors.textPrimary },
+  collapseHead: { flexDirection: "row", alignItems: "center", gap: 8 }
 });

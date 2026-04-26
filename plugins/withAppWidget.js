@@ -97,10 +97,10 @@ open class RelaxWidgetBase(private val size: String) : AppWidgetProvider() {
 
     private fun refreshAll(ctx: Context) {
         val mgr = AppWidgetManager.getInstance(ctx)
-        listOf(RelaxWidgetSmall::class.java, RelaxWidgetMedium::class.java, RelaxWidgetLarge::class.java)
+        listOf(RelaxWidgetSmall::class.java, RelaxWidgetMedium::class.java, RelaxWidgetVolume::class.java)
             .forEach { clz ->
                 val ids = mgr.getAppWidgetIds(ComponentName(ctx, clz))
-                val sz = when (clz.simpleName) { "RelaxWidgetSmall" -> "small"; "RelaxWidgetLarge" -> "large"; else -> "medium" }
+                val sz = when (clz.simpleName) { "RelaxWidgetSmall" -> "small"; "RelaxWidgetVolume" -> "volume"; else -> "medium" }
                 ids.forEach { id -> updateWidget(ctx, mgr, id, sz) }
             }
     }
@@ -117,7 +117,7 @@ open class RelaxWidgetBase(private val size: String) : AppWidgetProvider() {
         fun updateWidget(ctx: Context, mgr: AppWidgetManager, id: Int, size: String) {
             val layout = when (size) {
                 "small" -> R.layout::class.java.getField("relax_widget_small").getInt(null)
-                "large" -> R.layout::class.java.getField("relax_widget_large").getInt(null)
+                "volume" -> R.layout::class.java.getField("relax_widget_volume").getInt(null)
                 else -> R.layout::class.java.getField("relax_widget_medium").getInt(null)
             }
             val views = RemoteViews(ctx.packageName, layout)
@@ -133,6 +133,12 @@ open class RelaxWidgetBase(private val size: String) : AppWidgetProvider() {
 
             try { views.setTextViewText(R.id::class.java.getField("title").getInt(null), title) } catch (_: Throwable) {}
             try { views.setTextViewText(R.id::class.java.getField("mode_label").getInt(null), mode.uppercase()) } catch (_: Throwable) {}
+            // Volume widget shows current app volume (0–100%).
+            try {
+                val vid = R.id::class.java.getField("vol_label").getInt(null)
+                val pct = (audioPrefs.getFloat("vol", 0.7f) * 100f).toInt()
+                views.setTextViewText(vid, "$pct%")
+            } catch (_: Throwable) {}
             // Toggle the play/pause icon on the widget so it reflects the
             // actual playback state — req #1 / #11.
             try {
@@ -149,16 +155,16 @@ open class RelaxWidgetBase(private val size: String) : AppWidgetProvider() {
                 PendingIntent.getBroadcast(ctx, action.hashCode(), i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             }
 
-            // Volume controls live on the floating widget only — req #8
-            // ("remove the volume slider everywhere except the floating
-            // widget"). The volume actions remain registered but the
-            // home-screen widgets no longer surface them.
+            // Audio + wallpaper actions on small/medium widgets; volume
+            // up/down are exposed on the dedicated Volume widget (req #11).
             listOf(
                 "btn_toggle" to ACTION_TOGGLE,
                 "btn_next" to ACTION_NEXT,
                 "btn_prev" to ACTION_PREV,
                 "btn_mode" to ACTION_CYCLE_MODE,
-                "btn_change_wp" to ACTION_CHANGE_WALLPAPER
+                "btn_change_wp" to ACTION_CHANGE_WALLPAPER,
+                "btn_vol_up" to ACTION_VOL_UP,
+                "btn_vol_down" to ACTION_VOL_DOWN
             ).forEach { (viewName, action) ->
                 try {
                     val vid = R.id::class.java.getField(viewName).getInt(null)
@@ -173,7 +179,7 @@ open class RelaxWidgetBase(private val size: String) : AppWidgetProvider() {
 
 class RelaxWidgetSmall : RelaxWidgetBase("small")
 class RelaxWidgetMedium : RelaxWidgetBase("medium")
-class RelaxWidgetLarge : RelaxWidgetBase("large")
+class RelaxWidgetVolume : RelaxWidgetBase("volume")
 `;
 
 const MODULE_KT = `package ${PKG}.native
@@ -251,8 +257,47 @@ class RelaxWidgetModule(ctx: ReactApplicationContext) : ReactContextBaseJavaModu
 `;
 
 const widgetLayout = (variant) => {
+  // Volume widget has its own dedicated layout — handle separately.
+  if (variant === "volume") {
+    return `<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:padding="12dp" android:orientation="vertical"
+    android:background="@drawable/widget_background">
+    <TextView android:id="@+id/title"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="Relax Sound" android:textColor="#E8FFEF"
+        android:textSize="13sp" android:textStyle="bold"
+        android:singleLine="true" android:ellipsize="end" android:gravity="center_horizontal"/>
+    <TextView android:id="@+id/vol_label"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="70%" android:textColor="#9EE2B8"
+        android:textSize="11sp" android:gravity="center_horizontal"
+        android:layout_marginTop="2dp"/>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:layout_marginTop="6dp"
+        android:gravity="center" android:weightSum="3">
+        <ImageButton android:id="@+id/btn_vol_down"
+            android:layout_width="0dp" android:layout_height="38dp" android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:src="@android:drawable/ic_lock_silent_mode" android:tint="#E8FFEF"
+            android:scaleType="fitCenter" android:padding="6dp"/>
+        <ImageButton android:id="@+id/btn_toggle"
+            android:layout_width="0dp" android:layout_height="38dp" android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:src="@android:drawable/ic_media_play" android:tint="#22c55e"
+            android:scaleType="fitCenter" android:padding="4dp"/>
+        <ImageButton android:id="@+id/btn_vol_up"
+            android:layout_width="0dp" android:layout_height="38dp" android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:src="@android:drawable/ic_lock_silent_mode_off" android:tint="#E8FFEF"
+            android:scaleType="fitCenter" android:padding="6dp"/>
+    </LinearLayout>
+</LinearLayout>
+`;
+  }
   const showPrevNext = variant !== "small";
-  const showMode = variant === "large" || variant === "medium";
+  const showMode = variant === "medium";
   // Polished layout: title centered, controls in a single row, no volume
   // slider (per req #8). The frosty dark-green background mirrors the
   // mockups in design-screenshots.zip.
@@ -306,8 +351,8 @@ const widgetLayout = (variant) => {
 const widgetInfo = (variant) => {
   const [minW, minH, cellW, cellH] = variant === "small"
     ? [110, 40, 2, 1]
-    : variant === "large"
-      ? [250, 180, 4, 3]
+    : variant === "volume"
+      ? [180, 110, 3, 2]
       : [180, 110, 3, 2];
   return `<?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
@@ -352,7 +397,7 @@ const withAppWidgetManifest = (config) =>
   withAndroidManifest(config, (config) => {
     const app = AndroidConfig.Manifest.getMainApplicationOrThrow(config.modResults);
     app["receiver"] = app["receiver"] || [];
-    [["small", "RelaxWidgetSmall"], ["medium", "RelaxWidgetMedium"], ["large", "RelaxWidgetLarge"]].forEach(
+    [["small", "RelaxWidgetSmall"], ["medium", "RelaxWidgetMedium"], ["volume", "RelaxWidgetVolume"]].forEach(
       ([size, cls]) => {
         if (!app["receiver"].some((r) => r.$["android:name"] === `.widget.${cls}`)) {
           app["receiver"].push({
@@ -390,7 +435,7 @@ const withAppWidgetFiles = (config) =>
       const root = config.modRequest.projectRoot;
       writeNativeSource(root, "widget/RelaxWidget.kt", PROVIDER_KT);
       writeNativeSource(root, "native/RelaxWidgetModule.kt", MODULE_KT);
-      ["small", "medium", "large"].forEach((v) => {
+      ["small", "medium", "volume"].forEach((v) => {
         writeResource(root, `layout/relax_widget_${v}.xml`, widgetLayout(v));
         writeResource(root, `xml/relax_widget_${v}_info.xml`, widgetInfo(v));
       });

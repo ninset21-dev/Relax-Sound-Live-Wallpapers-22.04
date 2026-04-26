@@ -23,6 +23,8 @@ export default function HomeScreen() {
   const [gpSelected, setGpSelected] = useState<Set<string>>(new Set()); // holds FULL URLs
   const [libSelected, setLibSelected] = useState<Set<string>>(new Set());
   const [gpFullscreen, setGpFullscreen] = useState(false);
+  // req #15: collapsible loading hint banner.
+  const [gpHideLoadingHint, setGpHideLoadingHint] = useState(false);
   const [albumList, setAlbumList] = useState<MediaLibrary.Album[] | null>(null);
   const [albumLoading, setAlbumLoading] = useState(false);
 
@@ -384,6 +386,16 @@ export default function HomeScreen() {
             </Text>
           </View>
           <Text style={styles.sectionBody}>{t("home.googlePhotosHint")}</Text>
+          {/* req #15: prominent loading banner with collapse */}
+          {gpLoading && !gpHideLoadingHint && (
+            <View style={styles.gpLoadHint}>
+              <Ionicons name="cloud-download-outline" size={18} color={theme.colors.accentGlow} />
+              <Text style={[styles.body, { flex: 1, marginLeft: 8 }]}>{t("home.gpLoadingExplain")}</Text>
+              <Pressable onPress={() => setGpHideLoadingHint(true)} hitSlop={8}>
+                <Ionicons name="close" size={18} color={theme.colors.textMuted} />
+              </Pressable>
+            </View>
+          )}
           <View style={[styles.row, { marginTop: 10, gap: 8 }]}>
             <PrimaryButton
               label={gpFullscreen ? t("home.gpHide") : t("home.gpOpen", { count: gpPhotos.length })}
@@ -536,6 +548,11 @@ const styles = StyleSheet.create({
   subHeader: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: "600" },
   row: { flexDirection: "row" },
   rowBetween: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  gpLoadHint: {
+    flexDirection: "row", alignItems: "center", marginTop: 10, padding: 10,
+    backgroundColor: "rgba(34, 197, 94, 0.10)", borderWidth: 1,
+    borderColor: theme.colors.border, borderRadius: 12
+  },
   thumb: {
     width: 64, height: 64, borderRadius: 14, backgroundColor: theme.colors.surface,
     marginRight: 8, marginTop: 8, overflow: "hidden",

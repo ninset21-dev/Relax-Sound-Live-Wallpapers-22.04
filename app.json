@@ -2,7 +2,7 @@
   "expo": {
     "name": "Relax Sound Live Wallpapers",
     "slug": "relax-sound-live-wallpapers",
-    "version": "2.6.1",
+    "version": "2.7.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "relaxsound",
@@ -18,7 +18,7 @@
     ],
     "android": {
       "package": "com.relaxsound.livewallpapers",
-      "versionCode": 27,
+      "versionCode": 28,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon-foreground.png",
         "backgroundColor": "#0b1f14"

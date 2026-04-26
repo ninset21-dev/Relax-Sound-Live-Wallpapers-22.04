@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { View, StyleSheet, Dimensions, Animated, Easing } from "react-native";
+import { View, StyleSheet, Dimensions, Animated, Easing, PanResponder, GestureResponderEvent } from "react-native";
 import Svg, { Circle, Line, Path, Rect, G, Defs, RadialGradient, Stop } from "react-native-svg";
 import { EffectKind } from "@/contexts/AppContext";
 import { theme } from "@/theme/theme";
@@ -28,11 +28,43 @@ export const EffectPreview: React.FC<{
   const H = height ?? 360;
   const [tick, setTick] = useState(0);
   const particlesRef = useRef<Particle[]>([]);
+  // Touch-interaction state (req #2): finger acts as repulsion source.
+  const touchRef = useRef<{ x: number; y: number; vx: number; vy: number; strength: number; lastTs: number }>({
+    x: -1, y: -1, vx: 0, vy: 0, strength: 0, lastTs: 0,
+  });
 
   // When effect is "none", the native wallpaper engine skips overlay draw
   // entirely — mirror that behavior here so preview and real output match.
   const targetCount =
     effect === "none" ? 0 : Math.max(10, Math.min(80, Math.round(intensity * 80)));
+
+  const panResponder = useMemo(() =>
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (e: GestureResponderEvent) => {
+        const t = touchRef.current;
+        const now = Date.now();
+        t.x = e.nativeEvent.locationX;
+        t.y = e.nativeEvent.locationY;
+        t.vx = 0; t.vy = 0;
+        t.strength = 1;
+        t.lastTs = now;
+      },
+      onPanResponderMove: (e: GestureResponderEvent) => {
+        const t = touchRef.current;
+        const now = Date.now();
+        const dt = Math.max(1, now - t.lastTs);
+        t.vx = (e.nativeEvent.locationX - t.x) / dt * 1000;
+        t.vy = (e.nativeEvent.locationY - t.y) / dt * 1000;
+        t.x = e.nativeEvent.locationX;
+        t.y = e.nativeEvent.locationY;
+        t.strength = 1;
+        t.lastTs = now;
+      },
+      onPanResponderRelease: () => { touchRef.current.strength = 0.4; },
+      onPanResponderTerminate: () => { touchRef.current.strength = 0.4; },
+    }), []);
 
   useEffect(() => {
     // Reset particles whenever the effect changes so old particles don't
@@ -69,22 +101,45 @@ export const EffectPreview: React.FC<{
       lastTs = ts;
       const step = dt * Math.max(0.2, Math.min(3, speed));
       worldT += step;
-      // Same physics (gravity + slow wind oscillation) the native
-      // EffectRenderer applies (req #4 — in-app effect must mirror the
-      // live-wallpaper engine).
-      const wind = Math.sin(worldT * 0.4) * 0.5 + Math.cos(worldT * 0.17) * 0.3;
+      // Wind physics — mirrors the native EffectRenderer (req #1, #4): wide
+      // amplitude + occasional gusts so direction visibly changes over time.
+      const baseWind = Math.sin(worldT * 0.35) * 1.5 + Math.cos(worldT * 0.13) * 0.9;
+      const gv = Math.sin(worldT * 0.07 + Math.cos(worldT * 0.23) * 1.3);
+      const gust = Math.abs(gv) > 0.85 ? gv * 2.5 : gv * 0.4;
+      const wind = baseWind + gust;
+      const windY = Math.sin(worldT * 0.21) * 0.25;
       const gravity = gravityFor(effect);
+      const touch = touchRef.current;
+      // Decay touch strength after release so the "swipe gust" fades.
+      if (touch.strength > 0 && touch.strength < 1) {
+        touch.strength = Math.max(0, touch.strength - dt * 1.6);
+      }
       for (let i = p.length - 1; i >= 0; i--) {
         const q = p[i];
-        q.vx += wind * step * 0.6;
-        q.vy += gravity * step;
-        q.vx *= 0.995;
-        q.vy *= effect === "bubbles" ? 0.997 : 0.999;
+        q.vx += wind * step * 1.2;
+        q.vy += (gravity + windY * 6) * step;
+        // Touch repulsion (req #2)
+        if (touch.strength > 0 && touch.x >= 0) {
+          const dx = q.x - touch.x;
+          const dy = q.y - touch.y;
+          const d2 = dx * dx + dy * dy;
+          const radius = 180;
+          if (d2 < radius * radius) {
+            const d = Math.max(1, Math.sqrt(d2));
+            const falloff = (1 - d / radius) * touch.strength;
+            const ax = (dx / d) * falloff * 60 + touch.vx * falloff * 0.0025;
+            const ay = (dy / d) * falloff * 60 + touch.vy * falloff * 0.0025;
+            q.vx += ax * step;
+            q.vy += ay * step;
+          }
+        }
+        q.vx *= 0.992;
+        q.vy *= effect === "bubbles" ? 0.997 : 0.998;
         q.x += q.vx * step * 60;
         q.y += q.vy * step * 60;
         q.life -= step;
         q.phase += step * 2;
-        if (q.life <= 0 || q.y > H + 40 || q.y < -40 || q.x < -40 || q.x > W + 40) p.splice(i, 1);
+        if (q.life <= 0 || q.y > H + 40 || q.y < -40 || q.x < -60 || q.x > W + 60) p.splice(i, 1);
       }
       setTick((t) => (t + 1) % 10000);
       raf = requestAnimationFrame(loop);
@@ -97,7 +152,7 @@ export const EffectPreview: React.FC<{
   }, [effect, speed, W, H, targetCount, fps]);
 
   return (
-    <View style={[styles.wrap, { width: W, height: H, backgroundColor: transparent ? "transparent" : "#0b1f14" }]}>
+    <View {...panResponder.panHandlers} style={[styles.wrap, { width: W, height: H, backgroundColor: transparent ? "transparent" : "#0b1f14" }]}>
       <Svg width={W} height={H}>
         {!transparent && (
           <>

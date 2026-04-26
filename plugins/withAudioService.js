@@ -60,7 +60,12 @@ class RelaxAudioService : Service() {
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context, intent: Intent) {
             when (intent.action) {
-                Intent.ACTION_SCREEN_OFF -> pauseInternal()
+                // Do NOT pause on SCREEN_OFF — audio apps keep playing while
+                // the screen is locked (Spotify, YouTube Music etc). Pausing
+                // on screen-off was the root cause of "music doesn't auto-
+                // resume after unlock" complaints, because the player was
+                // really being stopped. We rely on audio focus to handle
+                // legitimate interruptions (other app starts playing).
                 Intent.ACTION_USER_PRESENT, Intent.ACTION_SCREEN_ON -> {
                     val wasPlaying = getSharedPreferences("relax_audio", MODE_PRIVATE)
                         .getBoolean("was_playing", false)
@@ -69,8 +74,6 @@ class RelaxAudioService : Service() {
                     // because the wallpaper engine's onVisibilityChanged(true)
                     // broadcast races with USER_PRESENT (and may never fire
                     // at all if the user hasn't installed the live wallpaper).
-                    // If the user actually opens another app afterwards, the
-                    // wallpaper visibility broadcast will pause us again.
                     if (wasPlaying) {
                         appVisible = true
                         fadeInAndResume()
@@ -83,8 +86,29 @@ class RelaxAudioService : Service() {
     private val visibilityReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context, intent: Intent) {
             appVisible = intent.getBooleanExtra("visible", true)
-            if (!appVisible) pauseInternal() else if (getSharedPreferences("relax_audio", MODE_PRIVATE)
-                    .getBoolean("was_playing", false)) fadeInAndResume()
+            val prefs = getSharedPreferences("relax_audio", MODE_PRIVATE)
+            // CRITICAL: do NOT pause on visible=false. The wallpaper engine
+            // reports invisible whenever the user opens any other app — but
+            // the user expects radio/music to keep playing in the background
+            // even while using a different app (req #3 + general expectation
+            // for "audio player regardless of foreground app"). Audio focus
+            // handles real "another app started playing music" cases.
+            if (appVisible) {
+                // CRITICAL FIX (req #3): when the live-wallpaper engine
+                // becomes visible (= user is back on the home screen with
+                // our wallpaper installed) we resume playback even if the
+                // user had previously paused — the wallpaper-visible
+                // signal is the strongest "user is back home" indicator
+                // we have. Only skip resume if there's literally nothing
+                // to play (no last_url AND no playlist).
+                val hasLast = !prefs.getString("last_url", null).isNullOrBlank()
+                if (hasLast) {
+                    // Force was_playing back to true so subsequent
+                    // SCREEN_OFF/ON cycles also resume.
+                    prefs.edit().putBoolean("was_playing", true).apply()
+                    fadeInAndResume()
+                }
+            }
         }
     }
 
@@ -260,7 +284,40 @@ class RelaxAudioService : Service() {
         p.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) { broadcastState() }
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                Log.e(TAG, "player error", error); pauseInternal()
+                Log.e(TAG, "player error", error)
+                // Auto-reconnect radio on transient network errors (req #16):
+                // instead of pausing, retry the same URL after a short
+                // backoff up to 5 times. Only pause if all retries fail.
+                val prefs = getSharedPreferences("relax_audio", MODE_PRIVATE)
+                val url = prefs.getString("last_url", null)
+                val attempts = prefs.getInt("retry_attempts", 0)
+                val isRadio = url?.startsWith("http") == true
+                if (isRadio && attempts < 5) {
+                    prefs.edit().putInt("retry_attempts", attempts + 1).apply()
+                    val backoff = (1500L * (attempts + 1)).coerceAtMost(8000L)
+                    handler.postDelayed({
+                        try {
+                            val pp = player ?: return@postDelayed
+                            pp.stop()
+                            pp.clearMediaItems()
+                            pp.setMediaItem(MediaItem.fromUri(Uri.parse(url)))
+                            pp.prepare()
+                            pp.volume = 0f
+                            pp.playWhenReady = true
+                            fadeInVolume(quick = true)
+                        } catch (t: Throwable) { Log.e(TAG, "auto-reconnect failed", t) }
+                    }, backoff)
+                } else {
+                    prefs.edit().putInt("retry_attempts", 0).apply()
+                    pauseInternal()
+                }
+            }
+            override fun onPlaybackStateChanged(state: Int) {
+                // Reset retry counter once playback successfully starts.
+                if (state == Player.STATE_READY) {
+                    getSharedPreferences("relax_audio", MODE_PRIVATE)
+                        .edit().putInt("retry_attempts", 0).apply()
+                }
             }
         })
     }

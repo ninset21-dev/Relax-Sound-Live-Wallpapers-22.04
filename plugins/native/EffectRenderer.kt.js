@@ -36,6 +36,32 @@ class EffectRenderer(private val context: Context, private val prefs: SharedPref
 
     private var lastFrameNs: Long = 0L
 
+    // Touch-interaction state (req #1, #2): the live wallpaper engine
+    // forwards onTouchEvent → notifyTouch() so particles in the renderer
+    // see the user's finger as a moving repulsion source. Decays over
+    // ~0.6s so a quick swipe still leaves a visible "wind gust" trail.
+    @Volatile private var touchX: Float = -1f
+    @Volatile private var touchY: Float = -1f
+    @Volatile private var touchStrength: Float = 0f
+    @Volatile private var touchVx: Float = 0f
+    @Volatile private var touchVy: Float = 0f
+    private var lastTouchNs: Long = 0L
+
+    fun notifyTouch(x: Float, y: Float, action: Int) {
+        val now = System.nanoTime()
+        if (lastTouchNs > 0L && action == 2 /*MOVE*/) {
+            val dt = ((now - lastTouchNs) / 1_000_000f).coerceAtLeast(1f)
+            touchVx = (x - touchX) / dt * 1000f
+            touchVy = (y - touchY) / dt * 1000f
+        } else {
+            touchVx = 0f; touchVy = 0f
+        }
+        touchX = x; touchY = y
+        // Down/move = full strength; up = decay quickly.
+        touchStrength = if (action == 1 /*UP*/ || action == 3 /*CANCEL*/) 0.4f else 1f
+        lastTouchNs = now
+    }
+
     fun drawOverlay(canvas: Canvas, effect: String, intensity: Float, speed: Float) {
         val w = canvas.width; val h = canvas.height
         if (w != lastW || h != lastH) { particles.clear(); lastW = w; lastH = h }
@@ -52,25 +78,61 @@ class EffectRenderer(private val context: Context, private val prefs: SharedPref
         val deltaSec = rawDelta.coerceIn(0.001f, 0.05f)
         val step = deltaSec * speed.coerceIn(0.2f, 3f)
         worldT += step
-        // Global wind: slow oscillation so all particles drift coherently.
-        val wind = sin(worldT * 0.4f) * 0.5f + cos(worldT * 0.17f) * 0.3f
+        // Global wind (req #1): two-frequency oscillation + occasional
+        // strong gust. Magnitude widened so wind visibly pushes particles
+        // sideways instead of barely nudging them. Direction varies with
+        // worldT so user sees particles drifting LEFT, then drifting
+        // RIGHT, then strong gusts — matches the "ветер раздувает в
+        // разные стороны" requirement.
+        val baseWind = sin(worldT * 0.35f) * 1.5f + cos(worldT * 0.13f) * 0.9f
+        val gust = (sin(worldT * 0.07f + cos(worldT * 0.23f) * 1.3f)).let { v ->
+            // Rare strong gusts (~ once every 8-15s, ±2.5 magnitude).
+            if (abs(v) > 0.85f) v * 2.5f else v * 0.4f
+        }
+        val wind = baseWind + gust
+        // Vertical wind component — small, lets snow/blossoms occasionally
+        // drift upward briefly when crosswinds shift, breaking monotony.
+        val windY = sin(worldT * 0.21f) * 0.25f
         val gravity = gravityFor(effect)
+        // Touch interaction decay — strength fades over ~0.6s after lift.
+        if (touchStrength > 0f && lastTouchNs > 0L) {
+            val sinceTouchSec = (System.nanoTime() - lastTouchNs) / 1_000_000_000f
+            touchStrength = (touchStrength - sinceTouchSec * 0.0016f).coerceAtLeast(0f)
+        }
 
         val it = particles.iterator()
         while (it.hasNext()) {
             val p = it.next()
-            p.vx += wind * step * 0.6f
-            p.vy += gravity * step
+            p.vx += wind * step * 1.2f
+            p.vy += (gravity + windY * 6f) * step
+            // Touch repulsion (req #2): particles within radius are pushed
+            // radially away with strength scaling 1/distance. Plus a
+            // velocity-aligned shove from the swipe direction so a quick
+            // flick blows particles in the swipe direction.
+            if (touchStrength > 0f && touchX >= 0f) {
+                val dx = p.x - touchX
+                val dy = p.y - touchY
+                val d2 = dx*dx + dy*dy
+                val radius = 240f
+                if (d2 < radius * radius) {
+                    val d = sqrt(d2).coerceAtLeast(1f)
+                    val falloff = (1f - d / radius) * touchStrength
+                    val ax = (dx / d) * falloff * 60f + touchVx * falloff * 0.0025f
+                    val ay = (dy / d) * falloff * 60f + touchVy * falloff * 0.0025f
+                    p.vx += ax * step
+                    p.vy += ay * step
+                }
+            }
             // Mild drag so velocities don't run away.
-            p.vx *= 0.995f
-            p.vy *= if (effect == "bubbles") 0.997f else 0.999f
+            p.vx *= 0.992f
+            p.vy *= if (effect == "bubbles") 0.997f else 0.998f
             p.x += p.vx * step * 60f
             p.y += p.vy * step * 60f
             p.life -= step
             p.phase += step * 2f
             if (p.life <= 0f ||
                 p.y > h + 60 || p.y < -60 ||
-                p.x < -80 || p.x > w + 80
+                p.x < -120 || p.x > w + 120
             ) it.remove()
         }
         for (p in particles) drawParticle(canvas, p, effect)
