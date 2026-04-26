@@ -69,34 +69,13 @@ export async function searchStations(params: {
   );
 }
 
-/**
- * Country whitelist (req #19): keep only stations from heavily-streamed
- * US/EU regions where most users live. Stations outside this list are
- * dropped — Radio Browser's clickcount ordering already biases toward
- * popular stations, but it leaks Brazilian/Indonesian/Russian regional
- * stations that are often unreachable on US/EU networks. Tweaked
- * empirically from station-aliveness probes during development.
- */
-const COUNTRY_WHITELIST = new Set([
-  "The United States Of America", "United States", "USA",
-  "United Kingdom", "Germany", "France", "Netherlands", "Italy", "Spain",
-  "Poland", "Austria", "Belgium", "Switzerland", "Sweden", "Norway",
-  "Finland", "Denmark", "Ireland", "Portugal", "Greece", "Czechia",
-  "Hungary", "Romania", "Slovakia", "Slovenia", "Croatia", "Bulgaria",
-  "Estonia", "Latvia", "Lithuania", "Luxembourg", "Iceland", "Canada"
-]);
-
 export async function popularByGenre(tag: string, quality: "auto" | "low" | "med" | "high"): Promise<Station[]> {
-  const all = await searchStations({ tag, limit: 200 });
+  const all = await searchStations({ tag, limit: 120 });
   if (!all.length) return [];
   const bw = await bitrateCapFor(quality);
-  // Filter by bitrate cap + US/EU country whitelist (req #19).
-  const filtered = all.filter((s) => {
-    if (bw !== 0 && (s.bitrate > bw || s.bitrate <= 0)) return false;
-    return COUNTRY_WHITELIST.has((s.country || "").trim());
-  });
-  const ordered = filtered.length > 10 ? filtered : all.filter((s) => COUNTRY_WHITELIST.has((s.country || "").trim()));
-  return (ordered.length ? ordered : all).slice(0, 50);
+  const filtered = all.filter((s) => (bw === 0 ? true : s.bitrate <= bw && s.bitrate > 0));
+  const ordered = filtered.length > 10 ? filtered : all;
+  return ordered.slice(0, 50);
 }
 
 /**

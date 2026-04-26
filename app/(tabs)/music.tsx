@@ -46,12 +46,6 @@ export default function MusicScreen() {
     genreRef.current = g;
     setLoading(true); setGenre(g);
     try {
-      // req #18: favorites pseudo-genre — render the user's saved
-      // stations directly, no API call.
-      if (g === "__favorites__") {
-        if (loadIdRef.current === myId) setStations(app.favoriteStations || []);
-        return;
-      }
       const fetched = await popularByGenre(g, q ?? app.quality);
       if (loadIdRef.current !== myId) return;
       setStations(fetched);
@@ -69,7 +63,7 @@ export default function MusicScreen() {
       // calls finishing late must not stomp on a fresh in-flight load.
       if (loadIdRef.current === myId) setLoading(false);
     }
-  }, [app.quality, app.favoriteStations]);
+  }, [app.quality]);
 
   useEffect(() => { loadGenre(genre); }, []);
 
@@ -236,14 +230,6 @@ export default function MusicScreen() {
             ))}
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 6 }}>
-            {/* req #18: "favorites" first chip */}
-            <Pressable
-              onPress={() => loadGenre("__favorites__")}
-              style={[styles.chip, genre === "__favorites__" && styles.chipActive, { marginRight: 6 }]}
-            >
-              <Ionicons name="star" size={12} color={genre === "__favorites__" ? "#0b1f14" : theme.colors.accent} />
-              <Text style={[styles.chipText, genre === "__favorites__" && styles.chipTextActive, { marginLeft: 4 }]}>{t("music.favorites")}</Text>
-            </Pressable>
             {GENRES.map((g) => (
               <Pressable key={g} onPress={() => loadGenre(g)} style={[styles.chip, genre === g && styles.chipActive, { marginRight: 6 }]}>
                 <Text style={[styles.chipText, genre === g && styles.chipTextActive]}>{g}</Text>
@@ -251,45 +237,16 @@ export default function MusicScreen() {
             ))}
           </ScrollView>
           {loading && <Text style={styles.body}>…</Text>}
-          {!loading && stations.map((s) => {
-            const url = s.url_resolved || s.url;
-            // req #6: highlight currently playing radio + show
-            // play/pause status icon.
-            const isCurrent = app.currentTrack?.uri === url;
-            const isPlaying = isCurrent && app.isPlaying;
-            const fav = (app.favoriteStations || []).some((f) => f.stationuuid === s.stationuuid);
-            return (
-              <Pressable
-                key={s.stationuuid}
-                style={[styles.station, isCurrent && styles.stationActive]}
-                onPress={() => playStation(s)}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.trackName, isCurrent && { color: theme.colors.accentGlow, fontWeight: "700" }]} numberOfLines={1}>
-                    {s.name.trim()}
-                  </Text>
-                  <Text style={styles.body} numberOfLines={1}>
-                    {isCurrent ? (isPlaying ? `▶ ${t("music.statusPlaying")}` : `❚❚ ${t("music.statusPaused")}`) : `${s.country} • ${s.codec} • ${s.bitrate}kbps`}
-                  </Text>
-                </View>
-                <Pressable
-                  hitSlop={8}
-                  onPress={() => app.toggleFavoriteStation(s)}
-                  style={{ paddingHorizontal: 6 }}
-                >
-                  <Ionicons name={fav ? "star" : "star-outline"} size={20} color={fav ? "#fbbf24" : theme.colors.textMuted} />
-                </Pressable>
-                <Ionicons
-                  name={isCurrent ? (isPlaying ? "pause" : "play") : "play"}
-                  size={20}
-                  color={isCurrent ? theme.colors.accentGlow : theme.colors.accent}
-                />
-              </Pressable>
-            );
-          })}
-          {!loading && stations.length === 0 && (
-            <Text style={styles.body}>{genre === "__favorites__" ? t("music.noFavorites") : t("music.noStations", { genre })}</Text>
-          )}
+          {!loading && stations.map((s) => (
+            <Pressable key={s.stationuuid} style={styles.station} onPress={() => playStation(s)}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.trackName} numberOfLines={1}>{s.name.trim()}</Text>
+                <Text style={styles.body} numberOfLines={1}>{s.country} • {s.codec} • {s.bitrate}kbps</Text>
+              </View>
+              <Ionicons name="play" size={20} color={theme.colors.accent} />
+            </Pressable>
+          ))}
+          {!loading && stations.length === 0 && <Text style={styles.body}>{t("music.noStations", { genre })}</Text>}
           </>}
         </GlassCard>
       </ScrollView>
@@ -322,6 +279,5 @@ const styles = StyleSheet.create({
   ghostBtnText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: "600" },
   trackName: { color: theme.colors.textPrimary, fontSize: theme.font.size.sm, flex: 1 },
   station: { flexDirection: "row", alignItems: "center", paddingVertical: 10, gap: 8, borderTopWidth: 1, borderTopColor: theme.colors.border },
-  stationActive: { backgroundColor: "rgba(34, 197, 94, 0.10)", borderRadius: 10, paddingHorizontal: 8 },
   collapseHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }
 });

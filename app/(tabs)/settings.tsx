@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { ScrollView, View, Text, StyleSheet, Pressable, Linking, Modal, Alert } from "react-native";
+import { SmoothSlider } from "@/components/SmoothSlider";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
 import i18n from "i18next";
@@ -11,11 +12,6 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { theme } from "@/theme/theme";
 import { useApp } from "@/contexts/AppContext";
 import { Accessibility, Floating } from "@/native";
-import Constants from "expo-constants";
-
-// Single source of truth: read the version from app.json via expo-constants
-// so the displayed version is always in sync with the build.
-const APP_VERSION = (Constants.expoConfig?.version as string | undefined) ?? "";
 
 const PRIVACY_URL =
   "https://sites.google.com/view/relax-sound-live-wallpapers/%D0%B3%D0%BB%D0%B0%D0%B2%D0%BD%D0%B0%D1%8F-%D1%81%D1%82%D1%80%D0%B0%D0%BD%D0%B8%D1%86%D0%B0";
@@ -40,8 +36,6 @@ export default function SettingsScreen() {
   const [a11yRationale, setA11yRationale] = useState(false);
   const [termsOpen, setTermsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
-  // req #8: Language menu collapsed by default — expand on tap.
-  const [langOpen, setLangOpen] = useState(false);
 
   const pickLanguage = async (l: string) => {
     // persist choice (system | en | ru | es | pt | de | fr | it | tr | ja | zh | ar)
@@ -63,36 +57,38 @@ export default function SettingsScreen() {
         <Text style={styles.h1}>{t("settings.title")}</Text>
 
         <GlassCard>
-          {/* req #8: collapsible language picker — collapsed by default. */}
-          <Pressable onPress={() => setLangOpen((v) => !v)} style={styles.collapseHead}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.sectionTitle}>{t("settings.language")}</Text>
-              <Text style={styles.body}>
-                {(SUPPORTED_LANGUAGES.find((l) => l.code === app.language)?.label) ?? t("settings.language")}
-              </Text>
-            </View>
-            <Ionicons name={langOpen ? "chevron-up" : "chevron-down"} size={20} color={theme.colors.accent} />
-          </Pressable>
-          {langOpen && (
-            <View style={[styles.row, { marginTop: 8, flexWrap: "wrap", gap: 6 }]}>
-              {SUPPORTED_LANGUAGES.map((lang) => (
-                <Pressable
-                  key={lang.code}
-                  onPress={() => pickLanguage(lang.code)}
-                  style={[styles.langChip, app.language === lang.code && styles.langChipActive]}
-                >
-                  <Text style={[styles.langChipText, app.language === lang.code && styles.langChipTextActive]}>
-                    {lang.label}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
+          <Text style={styles.sectionTitle}>{t("settings.language")}</Text>
+          <Text style={styles.body}>{t("settings.languageHint")}</Text>
+          <View style={[styles.row, { marginTop: 8, flexWrap: "wrap", gap: 6 }]}>
+            {SUPPORTED_LANGUAGES.map((lang) => (
+              <Pressable
+                key={lang.code}
+                onPress={() => pickLanguage(lang.code)}
+                style={[styles.langChip, app.language === lang.code && styles.langChipActive]}
+              >
+                <Text style={[styles.langChipText, app.language === lang.code && styles.langChipTextActive]}>
+                  {lang.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
         </GlassCard>
 
-        {/* req #9: removed standalone "UI/widget transparency" tile.
-            Transparency is still controlled via the Effects screen
-            (uiOpacity slider on the live wallpaper card). */}
+        <GlassCard>
+          <Text style={styles.sectionTitle}>{t("settings.uiOpacity")}</Text>
+          <Text style={styles.body}>{t("settings.uiOpacityHint")}</Text>
+          <Text style={[styles.body, { marginTop: 6 }]}>{Math.round(app.uiOpacity * 100)}%</Text>
+          <SmoothSlider
+            minimumValue={0}
+            maximumValue={1}
+            value={app.uiOpacity}
+            step={0.01}
+            minimumTrackTintColor={theme.colors.accent}
+            maximumTrackTintColor={theme.colors.border}
+            thumbTintColor={theme.colors.accent}
+            onSlidingComplete={(v) => app.setUiOpacity(v)}
+          />
+        </GlassCard>
 
         <GlassCard>
           <Text style={styles.sectionTitle}>{t("settings.doubleTapLock")}</Text>
@@ -160,7 +156,7 @@ export default function SettingsScreen() {
           </Pressable>
         </GlassCard>
 
-        <Text style={styles.footer}>Relax Sound Live Wallpapers v{APP_VERSION}</Text>
+        <Text style={styles.footer}>Relax Sound Live Wallpapers v2.6</Text>
       </ScrollView>
 
       {/* Accessibility rationale modal — Google Play requires apps to
@@ -208,7 +204,7 @@ export default function SettingsScreen() {
             </View>
             <ScrollView style={{ flex: 1, marginTop: 14 }}>
               <Text style={styles.aboutBig}>Relax Sound Live Wallpapers</Text>
-              <Text style={styles.body}>Version {APP_VERSION} • Nature Engine</Text>
+              <Text style={styles.body}>Version 2.6 • Nature Engine</Text>
               <View style={{ height: 14 }} />
               <Text style={styles.modalBody}>{t("settings.aboutBody")}</Text>
               <View style={{ height: 14 }} />
@@ -265,6 +261,5 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.accentGlow
   },
   langChipText: { color: theme.colors.textSecondary, fontSize: theme.font.size.sm, fontWeight: "600" },
-  langChipTextActive: { color: theme.colors.textPrimary },
-  collapseHead: { flexDirection: "row", alignItems: "center", gap: 8 }
+  langChipTextActive: { color: theme.colors.textPrimary }
 });

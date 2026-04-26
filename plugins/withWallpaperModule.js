@@ -139,24 +139,9 @@ class RelaxWallpaperModule(reactContext: ReactApplicationContext) :
             val image = rawImage?.takeIf { it.isNotBlank() }?.let { src ->
                 materializeImage(src) ?: src
             }
-            // CRITICAL FIX (req #5): when applying a NEW wallpaper, also
-            // clear the opposite key. Otherwise: video → photo → video
-            // leaves stale prefs ("video=A; image=B; later video=A again
-            // with image=B still set"). The engine's setupMedia() prefers
-            // video over image, but cachedVideoUri == newVideoUri means
-            // the frameTick change-detector won't rebuild MediaPlayer, so
-            // the dead engine state from the photo phase wins and video
-            // stops playing. Always clear the unused channel here.
-            val ed = prefs.edit()
-            if (!video.isNullOrBlank()) {
-                ed.putString("wallpaper_video_uri", video)
-                if (image.isNullOrBlank()) ed.remove("wallpaper_image_uri")
-                else ed.putString("wallpaper_image_uri", image)
-            } else {
-                ed.remove("wallpaper_video_uri")
-                ed.putString("wallpaper_image_uri", image)
-            }
-            ed
+            prefs.edit()
+                .putString("wallpaper_video_uri", video)
+                .putString("wallpaper_image_uri", image)
                 .putString("effect_type", effect)
                 .putFloat("effect_intensity", intensity)
                 .putFloat("effect_speed", speed)

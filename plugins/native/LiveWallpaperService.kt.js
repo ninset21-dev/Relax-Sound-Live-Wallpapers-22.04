@@ -231,10 +231,6 @@ class RelaxWallpaperService : WallpaperService() {
 
         override fun onSurfaceCreated(holder: SurfaceHolder) {
             super.onSurfaceCreated(holder)
-            // Touch events are OFF by default on WallpaperService.Engine —
-            // enabling here so the renderer can receive the user's finger
-            // for particle repulsion (req #2).
-            try { setTouchEventsEnabled(true) } catch (_: Throwable) {}
             setupMedia(holder)
             effectRenderer = EffectRenderer(this@RelaxWallpaperService, prefs)
         }
@@ -258,19 +254,6 @@ class RelaxWallpaperService : WallpaperService() {
         }
 
         override fun onTouchEvent(event: MotionEvent) {
-            // Forward to the particle renderer (req #2): finger position
-            // becomes a repulsion source so particles physically react to
-            // touch. Active for both the home-screen wallpaper and the
-            // in-app effect preview (which uses the same physics core).
-            try {
-                val action = when (event.actionMasked) {
-                    MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> 0
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> 1
-                    MotionEvent.ACTION_MOVE -> 2
-                    else -> 3
-                }
-                effectRenderer?.notifyTouch(event.x, event.y, action)
-            } catch (_: Throwable) {}
             gestureDetector.onTouchEvent(event)
         }
 
@@ -285,36 +268,11 @@ class RelaxWallpaperService : WallpaperService() {
                     val vol = if (audioEnabled)
                         prefs.getFloat("wallpaper_video_volume", 0.7f).coerceIn(0f, 1f)
                     else 0f
-                    // CRITICAL (req #5): when transitioning from image
-                    // (canvas-drawing) to video, the surface is in a
-                    // canvas-dirty state and MediaPlayer.setSurface may
-                    // silently fail. Reset the surface by locking + clearing
-                    // a black frame BEFORE handing it to MediaPlayer so the
-                    // surface format is in a known clean state.
-                    try {
-                        val cv = holder.lockCanvas()
-                        if (cv != null) {
-                            cv.drawColor(Color.BLACK)
-                            holder.unlockCanvasAndPost(cv)
-                        }
-                    } catch (_: Throwable) {}
-                    // Also recycle any cached image bitmap — the engine no
-                    // longer needs it and keeping it leaks ~10MB on swap.
-                    try { cachedBg?.recycle() } catch (_: Throwable) {}
-                    cachedBg = null
-                    cachedBgUri = null
-                    try { prevBg?.recycle() } catch (_: Throwable) {}
-                    prevBg = null
-                    Log.i(TAG, "setupMedia video uri=" + videoUri)
                     mediaPlayer = MediaPlayer().apply {
                         setDataSource(this@RelaxWallpaperService, Uri.parse(videoUri))
                         isLooping = true
                         setVolume(vol, vol)
                         setSurface(holder.surface)
-                        setOnErrorListener { _, what, extra ->
-                            Log.e(TAG, "MediaPlayer error what=$what extra=$extra uri=$videoUri")
-                            false
-                        }
                         prepare()
                         start()
                     }

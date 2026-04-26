@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
 import { Stack } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -7,8 +7,7 @@ import * as SystemUI from "expo-system-ui";
 import { AppProvider, useApp } from "@/contexts/AppContext";
 import "@/i18n";
 import { applyLanguage } from "@/i18n";
-import { OnboardingModal } from "@/components/OnboardingModal";
-import { AnimatedSplash } from "@/components/AnimatedSplash";
+import { theme } from "@/theme/theme";
 
 const LanguageBridge: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const app = useApp();
@@ -23,11 +22,6 @@ const LanguageBridge: React.FC<{ children: React.ReactNode }> = ({ children }) =
 };
 
 export default function RootLayout() {
-  // req #13: animated splash on app load. Hide after ~1.4s — by then state
-  // has hydrated and i18n has applied. Native services initialise async
-  // anyway; the splash just covers the empty initial render.
-  const [splashDone, setSplashDone] = useState(false);
-
   useEffect(() => {
     // Activity is translucent (see plugins/withTransparentActivity.js) — keep
     // the system-UI window background fully transparent so the launcher
@@ -43,8 +37,6 @@ export default function RootLayout() {
             <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "transparent" } }}>
               <Stack.Screen name="(tabs)" />
             </Stack>
-            <OnboardingModal />
-            {!splashDone && <AnimatedSplash onDone={() => setSplashDone(true)} />}
           </LanguageBridge>
         </AppProvider>
       </SafeAreaProvider>

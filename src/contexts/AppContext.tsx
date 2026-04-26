@@ -50,10 +50,6 @@ interface AppState_ {
   // app background so the UI reflects the user's chosen scene).
   currentWallpaperUri?: string;
   wallpaperTarget: "home" | "lock" | "both";
-  // req #18: persisted favorite radio stations.
-  favoriteStations: import("@/services/radio").Station[];
-  // req #12: first-launch onboarding modal acknowledged flag.
-  onboardingDone: boolean;
 }
 type Ctx = AppState_ & {
   addMedia(items: MediaItem[]): void;
@@ -84,8 +80,6 @@ type Ctx = AppState_ & {
   prevTrack(): Promise<void>;
   applyLiveWallpaper(mode: "home" | "lock" | "both"): Promise<void>;
   refreshA11y(): Promise<void>;
-  toggleFavoriteStation(s: import("@/services/radio").Station): void;
-  setOnboardingDone(v: boolean): void;
 };
 
 const Default: AppState_ = {
@@ -109,9 +103,7 @@ const Default: AppState_ = {
   liveWallpaperActive: false,
   repeatMode: "off",
   uiOpacity: 1,
-  wallpaperTarget: "both",
-  favoriteStations: [],
-  onboardingDone: false
+  wallpaperTarget: "both"
 };
 
 const AppCtx = createContext<Ctx | null>(null);
@@ -186,27 +178,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   useEffect(() => {
-    const sub = onAudioState((s) => {
-      setState((p) => {
-        const nextRepeat = (s.repeatMode as RepeatMode) ?? p.repeatMode;
-        // Persist the repeat mode if it actually changed (e.g. driven by
-        // widget). High-frequency volume/playing toggles are NOT persisted
-        // here to avoid hammering AsyncStorage on every audio broadcast.
-        if (nextRepeat !== p.repeatMode) {
-          AsyncStorage.setItem(
-            STORAGE_KEY,
-            JSON.stringify({ ...p, repeatMode: nextRepeat })
-          ).catch(() => {});
-        }
-        return {
-          ...p,
-          isPlaying: s.isPlaying,
-          volume: s.volume,
-          repeatMode: nextRepeat,
-          currentTrack: p.currentTrack ? { ...p.currentTrack, title: s.title || p.currentTrack.title } : p.currentTrack
-        };
-      });
-    });
+    const sub = onAudioState((s) =>
+      setState((p) => ({
+        ...p,
+        isPlaying: s.isPlaying,
+        volume: s.volume,
+        repeatMode: (s.repeatMode as RepeatMode) ?? p.repeatMode,
+        currentTrack: p.currentTrack ? { ...p.currentTrack, title: s.title || p.currentTrack.title } : p.currentTrack
+      }))
+    );
     return () => sub.remove();
   }, []);
 
@@ -417,16 +397,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       },
       refreshA11y: async () => {
         try { const v = await Accessibility.isEnabled(); persist({ a11yEnabled: !!v }); } catch {}
-      },
-      toggleFavoriteStation: (s) => {
-        const cur = state.favoriteStations || [];
-        const exists = cur.some((f) => f.stationuuid === s.stationuuid);
-        const next = exists
-          ? cur.filter((f) => f.stationuuid !== s.stationuuid)
-          : [...cur, s];
-        persist({ favoriteStations: next });
-      },
-      setOnboardingDone: (v) => persist({ onboardingDone: v })
+      }
     }),
     [state, persist]
   );

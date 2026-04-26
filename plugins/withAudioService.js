@@ -37,13 +37,11 @@ class RelaxAudioService : Service() {
         const val ACTION_DUCK = "${PKG}.audio.DUCK"
         const val ACTION_UNDUCK = "${PKG}.audio.UNDUCK"
         const val ACTION_TOGGLE_REPEAT = "${PKG}.audio.TOGGLE_REPEAT"
-        const val ACTION_SET_REPEAT = "${PKG}.audio.SET_REPEAT"
         const val ACTION_RESUME = "${PKG}.audio.RESUME"
         const val EXTRA_URL = "url"
         const val EXTRA_TITLE = "title"
         const val EXTRA_VOLUME = "volume"
         const val EXTRA_GAPLESS = "gapless"
-        const val EXTRA_REPEAT_MODE = "repeat_mode"
         const val CHANNEL_ID = "relax_audio_channel"
         const val NOTIF_ID = 4711
         const val TAG = "RelaxAudio"
@@ -60,12 +58,7 @@ class RelaxAudioService : Service() {
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context, intent: Intent) {
             when (intent.action) {
-                // Do NOT pause on SCREEN_OFF — audio apps keep playing while
-                // the screen is locked (Spotify, YouTube Music etc). Pausing
-                // on screen-off was the root cause of "music doesn't auto-
-                // resume after unlock" complaints, because the player was
-                // really being stopped. We rely on audio focus to handle
-                // legitimate interruptions (other app starts playing).
+                Intent.ACTION_SCREEN_OFF -> pauseInternal()
                 Intent.ACTION_USER_PRESENT, Intent.ACTION_SCREEN_ON -> {
                     val wasPlaying = getSharedPreferences("relax_audio", MODE_PRIVATE)
                         .getBoolean("was_playing", false)
@@ -74,6 +67,8 @@ class RelaxAudioService : Service() {
                     // because the wallpaper engine's onVisibilityChanged(true)
                     // broadcast races with USER_PRESENT (and may never fire
                     // at all if the user hasn't installed the live wallpaper).
+                    // If the user actually opens another app afterwards, the
+                    // wallpaper visibility broadcast will pause us again.
                     if (wasPlaying) {
                         appVisible = true
                         fadeInAndResume()
@@ -86,29 +81,8 @@ class RelaxAudioService : Service() {
     private val visibilityReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context, intent: Intent) {
             appVisible = intent.getBooleanExtra("visible", true)
-            val prefs = getSharedPreferences("relax_audio", MODE_PRIVATE)
-            // CRITICAL: do NOT pause on visible=false. The wallpaper engine
-            // reports invisible whenever the user opens any other app — but
-            // the user expects radio/music to keep playing in the background
-            // even while using a different app (req #3 + general expectation
-            // for "audio player regardless of foreground app"). Audio focus
-            // handles real "another app started playing music" cases.
-            if (appVisible) {
-                // CRITICAL FIX (req #3): when the live-wallpaper engine
-                // becomes visible (= user is back on the home screen with
-                // our wallpaper installed) we resume playback even if the
-                // user had previously paused — the wallpaper-visible
-                // signal is the strongest "user is back home" indicator
-                // we have. Only skip resume if there's literally nothing
-                // to play (no last_url AND no playlist).
-                val hasLast = !prefs.getString("last_url", null).isNullOrBlank()
-                if (hasLast) {
-                    // Force was_playing back to true so subsequent
-                    // SCREEN_OFF/ON cycles also resume.
-                    prefs.edit().putBoolean("was_playing", true).apply()
-                    fadeInAndResume()
-                }
-            }
+            if (!appVisible) pauseInternal() else if (getSharedPreferences("relax_audio", MODE_PRIVATE)
+                    .getBoolean("was_playing", false)) fadeInAndResume()
         }
     }
 
@@ -170,18 +144,6 @@ class RelaxAudioService : Service() {
                 val next = when (cur) { "off" -> "all"; "all" -> "one"; else -> "off" }
                 prefs.edit().putString("repeat_mode", next).apply()
                 player?.repeatMode = when (next) {
-                    "one" -> Player.REPEAT_MODE_ONE
-                    "all" -> Player.REPEAT_MODE_ALL
-                    else -> Player.REPEAT_MODE_OFF
-                }
-                broadcastState()
-            }
-            ACTION_SET_REPEAT -> {
-                // Targeted set (vs ACTION_TOGGLE_REPEAT which cycles).
-                val mode = intent.getStringExtra(EXTRA_REPEAT_MODE) ?: "off"
-                getSharedPreferences("relax_audio", MODE_PRIVATE).edit()
-                    .putString("repeat_mode", mode).apply()
-                player?.repeatMode = when (mode) {
                     "one" -> Player.REPEAT_MODE_ONE
                     "all" -> Player.REPEAT_MODE_ALL
                     else -> Player.REPEAT_MODE_OFF
@@ -284,40 +246,7 @@ class RelaxAudioService : Service() {
         p.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) { broadcastState() }
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                Log.e(TAG, "player error", error)
-                // Auto-reconnect radio on transient network errors (req #16):
-                // instead of pausing, retry the same URL after a short
-                // backoff up to 5 times. Only pause if all retries fail.
-                val prefs = getSharedPreferences("relax_audio", MODE_PRIVATE)
-                val url = prefs.getString("last_url", null)
-                val attempts = prefs.getInt("retry_attempts", 0)
-                val isRadio = url?.startsWith("http") == true
-                if (isRadio && attempts < 5) {
-                    prefs.edit().putInt("retry_attempts", attempts + 1).apply()
-                    val backoff = (1500L * (attempts + 1)).coerceAtMost(8000L)
-                    handler.postDelayed({
-                        try {
-                            val pp = player ?: return@postDelayed
-                            pp.stop()
-                            pp.clearMediaItems()
-                            pp.setMediaItem(MediaItem.fromUri(Uri.parse(url)))
-                            pp.prepare()
-                            pp.volume = 0f
-                            pp.playWhenReady = true
-                            fadeInVolume(quick = true)
-                        } catch (t: Throwable) { Log.e(TAG, "auto-reconnect failed", t) }
-                    }, backoff)
-                } else {
-                    prefs.edit().putInt("retry_attempts", 0).apply()
-                    pauseInternal()
-                }
-            }
-            override fun onPlaybackStateChanged(state: Int) {
-                // Reset retry counter once playback successfully starts.
-                if (state == Player.STATE_READY) {
-                    getSharedPreferences("relax_audio", MODE_PRIVATE)
-                        .edit().putInt("retry_attempts", 0).apply()
-                }
+                Log.e(TAG, "player error", error); pauseInternal()
             }
         })
     }
@@ -704,20 +633,13 @@ class RelaxAudioModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun setRepeatMode(mode: String, promise: Promise) {
         try {
-            val ctx = reactApplicationContext
-            ctx.getSharedPreferences("relax_audio", Context.MODE_PRIVATE)
+            reactApplicationContext.getSharedPreferences("relax_audio", Context.MODE_PRIVATE)
                 .edit().putString("repeat_mode", mode).apply()
-            // Dispatch a targeted SET_REPEAT (not the cyclic toggle) so a
-            // running service applies the new mode to ExoPlayer in the same
-            // frame instead of waiting for the next play() call.
-            val i = Intent(ctx, RelaxAudioService::class.java).apply {
-                action = RelaxAudioService.ACTION_SET_REPEAT
-                putExtra(RelaxAudioService.EXTRA_REPEAT_MODE, mode)
-            }
-            try {
-                if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i)
-                else ctx.startService(i)
-            } catch (_: Throwable) { /* service may not be running yet — pref read on next start */ }
+            // Ask service to apply immediately if running
+            val ctx = reactApplicationContext
+            val i = Intent(ctx, RelaxAudioService::class.java).apply { action = RelaxAudioService.ACTION_TOGGLE_REPEAT }
+            // Avoid toggle: use a dedicated action path via intent extra; service re-reads pref.
+            // (Simpler: just persist — user-visible effect takes effect on next play.)
             promise.resolve(true)
         } catch (t: Throwable) { promise.reject("REPEAT_FAIL", t) }
     }
