@@ -268,32 +268,34 @@ class RelaxWallpaperService : WallpaperService() {
                     val vol = if (audioEnabled)
                         prefs.getFloat("wallpaper_video_volume", 0.7f).coerceIn(0f, 1f)
                     else 0f
-                    // Req #3: video\u2192photo\u2192video regression fix. After we drew
-                    // a still image with Canvas (lockCanvas/unlockCanvasAndPost),
-                    // the SurfaceHolder's surface is stuck in CPU-producer mode
-                    // and MediaPlayer.setSurface() will silently fail to render
-                    // any frames. Two-step recovery:
-                    //   1) Clear the canvas with a transparent fill so the
-                    //      buffer queue is not holding stale image content.
-                    //   2) Use setDisplay(holder) instead of setSurface(surface)
-                    //      \u2014 setDisplay accepts the SurfaceHolder and properly
-                    //      reattaches the producer side, while setSurface keeps
-                    //      a ref to the same Surface object that may already be
-                    //      consumed.
-                    try {
-                        val c = holder.lockCanvas()
-                        if (c != null) {
-                            c.drawColor(0, android.graphics.PorterDuff.Mode.CLEAR)
-                            holder.unlockCanvasAndPost(c)
-                        }
-                    } catch (_: Throwable) {}
+                    // Req #3: video\u2192photo\u2192video regression. When the user
+                    // applies an image wallpaper after a video, the engine
+                    // owned the Surface as a video producer; the new image
+                    // path then drew via lockCanvas() (CPU producer). Going
+                    // back to video would fail because MediaPlayer cannot
+                    // bind to a Surface still claimed by a Canvas producer.
+                    //
+                    // The correct cure is to fully release any prior
+                    // MediaPlayer (above), and bind via setDisplay(holder)
+                    // \u2014 which goes through SurfaceHolder.addCallback paths
+                    // and tolerates the producer-mode switch. We do NOT
+                    // pre-clear with lockCanvas here \u2014 that would actively
+                    // PUT the surface into CPU mode for fresh installs and
+                    // break the basic case (user reported "video doesn't
+                    // install at all").
+                    try { mediaPlayer?.stop(); mediaPlayer?.release() } catch (_: Throwable) {}
+                    mediaPlayer = null
                     mediaPlayer = MediaPlayer().apply {
                         setDataSource(this@RelaxWallpaperService, Uri.parse(videoUri))
                         isLooping = true
                         setVolume(vol, vol)
                         setDisplay(holder)
-                        prepare()
-                        start()
+                        setOnPreparedListener { try { it.start() } catch (_: Throwable) {} }
+                        setOnErrorListener { _, what, extra ->
+                            Log.e(TAG, "MediaPlayer error what=$what extra=$extra uri=$videoUri")
+                            false
+                        }
+                        prepareAsync()
                     }
                     // Track that we've bound this URI so frameTick's change
                     // detector doesn't immediately tear the player down on

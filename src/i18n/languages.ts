@@ -123,7 +123,8 @@ export const en: Dict = {
       favorites: "Favorites",
       noFavorites: "No favorites yet — tap the star next to a station.",
       statusPlaying: "Playing",
-      statusStalled: "Stalled — reconnecting…"
+      statusStalled: "Stalled — reconnecting…",
+      searchPlaceholder: "Search stations by name…"
     },
     effects: {
       title: "Visual Effects",
@@ -312,7 +313,8 @@ export const ru: Dict = {
       favorites: "Избранное",
       noFavorites: "Пусто — нажмите ★ рядом со станцией.",
       statusPlaying: "Играет",
-      statusStalled: "Завис — переподключение…"
+      statusStalled: "Завис — переподключение…",
+      searchPlaceholder: "Поиск радиостанций по названию…"
     },
     effects: {
       title: "Визуальные эффекты",

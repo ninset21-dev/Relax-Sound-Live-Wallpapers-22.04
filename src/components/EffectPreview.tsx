@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { View, StyleSheet, Dimensions, Animated, Easing } from "react-native";
-import Svg, { Circle, Line, Path, Rect, G, Defs, RadialGradient, Stop } from "react-native-svg";
+import Svg, { Circle, Line, Path, Rect, G, Defs, RadialGradient, Stop, Ellipse } from "react-native-svg";
 import { EffectKind } from "@/contexts/AppContext";
 import { theme } from "@/theme/theme";
 
@@ -155,14 +155,60 @@ function renderParticle(effect: EffectKind, p: Particle, i: number) {
   switch (effect) {
     case "rain":
       return <Line key={i} x1={p.x} y1={p.y} x2={p.x} y2={p.y + 14} stroke={`rgba(180,220,255,${a})`} strokeWidth={p.size} />;
-    case "snow":
-      return <Circle key={i} cx={p.x + Math.sin(p.phase) * 2} cy={p.y} r={p.size} fill={`rgba(255,255,255,${a})`} />;
+    case "snow": {
+      // Six-spoke snowflake — much closer to a real snowflake than a ball.
+      const cx = p.x + Math.sin(p.phase) * 2;
+      const cy = p.y;
+      const r = p.size;
+      const stroke = `rgba(245,250,255,${a})`;
+      const spokes = [];
+      for (let k = 0; k < 6; k++) {
+        const ang = (k * Math.PI) / 3 + p.phase * 0.3;
+        const x2 = cx + Math.cos(ang) * r;
+        const y2 = cy + Math.sin(ang) * r;
+        spokes.push(<Line key={`s${k}`} x1={cx} y1={cy} x2={x2} y2={y2} stroke={stroke} strokeWidth={1.4} />);
+      }
+      return (
+        <G key={i}>
+          {spokes}
+          <Circle cx={cx} cy={cy} r={r * 0.25} fill={stroke} />
+        </G>
+      );
+    }
     case "bubbles":
       return <Circle key={i} cx={p.x + Math.sin(p.phase) * 4} cy={p.y} r={p.size} fill="transparent" stroke={`rgba(180,220,255,${a})`} strokeWidth={2} />;
-    case "leaves":
-      return <Circle key={i} cx={p.x} cy={p.y} r={p.size * 0.6} fill={`rgba(${120 + Math.round(Math.sin(p.phase) * 40)},180,80,${a})`} />;
-    case "flowers":
-      return <Circle key={i} cx={p.x} cy={p.y} r={p.size * 0.6} fill={`rgba(240,180,220,${a})`} />;
+    case "leaves": {
+      // Real leaf: rotated ellipse + central vein for unmistakable shape.
+      const r = p.size;
+      const rot = ((p.phase * 30) % 360).toFixed(1);
+      const fill = `rgba(${120 + Math.round(Math.sin(p.phase) * 40)},180,80,${a})`;
+      const vein = `rgba(80,120,40,${a * 0.7})`;
+      return (
+        <G key={i} transform={`rotate(${rot} ${p.x} ${p.y})`}>
+          <Ellipse cx={p.x} cy={p.y} rx={r} ry={r * 0.4} fill={fill} />
+          <Line x1={p.x - r} y1={p.y} x2={p.x + r} y2={p.y} stroke={vein} strokeWidth={1} />
+        </G>
+      );
+    }
+    case "flowers": {
+      // 5 petals around a yellow center — recognisably a flower, not a ball.
+      const r = p.size;
+      const center = `rgba(255,230,120,${a})`;
+      const petalC = `rgba(240,180,220,${a})`;
+      const petals = [];
+      for (let k = 0; k < 5; k++) {
+        const ang = (k * Math.PI * 2) / 5 + p.phase * 0.4;
+        const px = p.x + Math.cos(ang) * r * 0.55;
+        const py = p.y + Math.sin(ang) * r * 0.55;
+        petals.push(<Circle key={`p${k}`} cx={px} cy={py} r={r * 0.45} fill={petalC} />);
+      }
+      return (
+        <G key={i}>
+          {petals}
+          <Circle cx={p.x} cy={p.y} r={r * 0.3} fill={center} />
+        </G>
+      );
+    }
     case "fireflies": {
       const pulse = Math.sin(p.phase * 3) * 0.5 + 0.5;
       return <Circle key={i} cx={p.x} cy={p.y} r={p.size * (1.2 + pulse * 0.4)} fill={`rgba(255,255,180,${a * pulse})`} />;
@@ -176,8 +222,20 @@ function renderParticle(effect: EffectKind, p: Particle, i: number) {
         </G>
       );
     }
-    case "cherryblossom":
-      return <Circle key={i} cx={p.x} cy={p.y} r={p.size * 0.7} fill={`rgba(255,${190 + Math.round(Math.sin(p.phase) * 15)},215,${a})`} />;
+    case "cherryblossom": {
+      // 5 small petals = sakura — not a ball.
+      const r = p.size * 0.65;
+      const petalC = `rgba(255,${190 + Math.round(Math.sin(p.phase) * 15)},215,${a})`;
+      const center = `rgba(255,230,200,${a * 0.9})`;
+      const petals = [];
+      for (let k = 0; k < 5; k++) {
+        const ang = (k * Math.PI * 2) / 5 + p.phase * 0.6;
+        const px = p.x + Math.cos(ang) * r * 0.6;
+        const py = p.y + Math.sin(ang) * r * 0.6;
+        petals.push(<Circle key={`cp${k}`} cx={px} cy={py} r={r * 0.55} fill={petalC} />);
+      }
+      return (<G key={i}>{petals}<Circle cx={p.x} cy={p.y} r={r * 0.3} fill={center} /></G>);
+    }
     case "plasma": {
       const hue = Math.round(((p.phase * 40) % 360 + 360) % 360);
       return <Circle key={i} cx={p.x} cy={p.y} r={p.size} fill={`hsla(${hue}, 75%, 60%, 0.35)`} />;

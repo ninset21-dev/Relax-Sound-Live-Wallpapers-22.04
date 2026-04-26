@@ -58,18 +58,19 @@ class RelaxAudioService : Service() {
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context, intent: Intent) {
             when (intent.action) {
-                Intent.ACTION_SCREEN_OFF -> pauseInternal()
+                // CRITICAL (user req): do NOT pause on SCREEN_OFF. The user
+                // wants music to keep playing in the background like a real
+                // audio player even when the screen is off. Audio focus loss
+                // (another app starting playback) still pauses us via the
+                // focus listener, which is the correct behaviour.
                 Intent.ACTION_USER_PRESENT, Intent.ACTION_SCREEN_ON -> {
                     val wasPlaying = getSharedPreferences("relax_audio", MODE_PRIVATE)
                         .getBoolean("was_playing", false)
-                    // On unlock we resume unconditionally if the user hadn't
-                    // deliberately paused — we can't rely on appVisible here
-                    // because the wallpaper engine's onVisibilityChanged(true)
-                    // broadcast races with USER_PRESENT (and may never fire
-                    // at all if the user hasn't installed the live wallpaper).
-                    // If the user actually opens another app afterwards, the
-                    // wallpaper visibility broadcast will pause us again.
-                    if (wasPlaying) {
+                    // On unlock we resume only if the user had not explicitly
+                    // tapped pause. If they did (was_playing=false), respect
+                    // that. The "user is on home screen" auto-resume is
+                    // handled by the wallpaper visibility receiver below.
+                    if (wasPlaying && (player?.isPlaying != true)) {
                         appVisible = true
                         fadeInAndResume()
                     }
@@ -81,8 +82,22 @@ class RelaxAudioService : Service() {
     private val visibilityReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context, intent: Intent) {
             appVisible = intent.getBooleanExtra("visible", true)
-            if (!appVisible) pauseInternal() else if (getSharedPreferences("relax_audio", MODE_PRIVATE)
-                    .getBoolean("was_playing", false)) fadeInAndResume()
+            // CRITICAL (user req): do NOT pause when visibility goes false.
+            // The user expects music to keep playing while they use other
+            // apps — like Spotify or any other audio player. We only auto-
+            // resume on visible=true so returning to the home screen with
+            // our wallpaper installed brings playback back if it was paused
+            // (e.g. by a transient focus loss).
+            if (appVisible) {
+                val prefs = getSharedPreferences("relax_audio", MODE_PRIVATE)
+                val hasLast = !prefs.getString("last_url", null).isNullOrBlank()
+                if (hasLast && (player?.isPlaying != true)) {
+                    // Force was_playing back to true so subsequent SCREEN_OFF
+                    // / SCREEN_ON cycles also resume cleanly.
+                    prefs.edit().putBoolean("was_playing", true).apply()
+                    fadeInAndResume()
+                }
+            }
         }
     }
 
@@ -202,27 +217,42 @@ class RelaxAudioService : Service() {
 
     private fun requestFocus(): Boolean {
         val am = audioManager ?: return false
-        val attrs = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_MEDIA)
-            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-            .build()
-        focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-            .setAudioAttributes(attrs)
-            .setWillPauseWhenDucked(true)
-            .setOnAudioFocusChangeListener { change ->
-                when (change) {
-                    AudioManager.AUDIOFOCUS_LOSS,
-                    AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
-                    AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> pauseInternal()
-                    AudioManager.AUDIOFOCUS_GAIN -> fadeInAndResume()
+        // CRITICAL: do NOT create a new AudioFocusRequest on every play() call.
+        // The previous request's onAudioFocusChange listener stays registered
+        // until abandonAudioFocusRequest() is called, so requesting a new focus
+        // would fire AUDIOFOCUS_LOSS on the old listener, which then calls
+        // pauseInternal() right after we just started playing. That's why the
+        // user reported "music pauses on station switch / needs 2 taps to play".
+        // We build the focus request lazily once and reuse it forever.
+        if (focusRequest == null) {
+            val attrs = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                .build()
+            focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                .setAudioAttributes(attrs)
+                .setWillPauseWhenDucked(true)
+                .setOnAudioFocusChangeListener { change ->
+                    when (change) {
+                        AudioManager.AUDIOFOCUS_LOSS,
+                        AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+                        AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> pauseInternal()
+                        AudioManager.AUDIOFOCUS_GAIN -> fadeInAndResume()
+                    }
                 }
-            }
-            .build()
-        return am.requestAudioFocus(focusRequest!!) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+                .build()
+        }
+        // If we already hold focus, no need to re-request — return true.
+        if (haveFocus) return true
+        val result = am.requestAudioFocus(focusRequest!!)
+        haveFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        return haveFocus
     }
+    private var haveFocus: Boolean = false
 
     private fun releaseFocus() {
         audioManager?.let { am -> focusRequest?.let { am.abandonAudioFocusRequest(it) } }
+        haveFocus = false
     }
 
     /**

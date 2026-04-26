@@ -82,21 +82,25 @@ type Ctx = AppState_ & {
   refreshA11y(): Promise<void>;
 };
 
+// First-launch defaults requested by user: auto-change ON @ 10s, sound ON,
+// fireflies effect, perf=high, volume 100%. These are written into prefs the
+// first time the app boots (no persisted state) and then frozen in
+// AsyncStorage like normal user settings.
 const Default: AppState_ = {
   mediaLibrary: [],
   tracks: [],
   isPlaying: false,
-  volume: 0.7,
+  volume: 1,
   fadeMs: 2500,
-  perfMode: "balanced",
+  perfMode: "high",
   quality: "auto",
-  effect: "none",
-  intensity: 0.5,
+  effect: "fireflies",
+  intensity: 0.6,
   speed: 1,
-  fps: 30,
-  autoChangeEnabled: false,
-  autoChangeSec: 60,
-  videoAudio: false,
+  fps: 60,
+  autoChangeEnabled: true,
+  autoChangeSec: 10,
+  videoAudio: true,
   language: "system",
   overlayEnabled: false,
   a11yEnabled: false,

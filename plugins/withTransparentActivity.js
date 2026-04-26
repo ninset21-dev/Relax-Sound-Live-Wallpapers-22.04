@@ -29,6 +29,30 @@ const withTransparentActivity = (config) => {
       ensureItem("android:windowDrawsSystemBarBackgrounds", "true");
       ensureItem("android:statusBarColor", "@android:color/transparent");
       ensureItem("android:navigationBarColor", "@android:color/transparent");
+      // CRITICAL: without windowShowWallpaper=true, a translucent activity
+      // shows BLACK behind the app instead of the user's actual home-screen
+      // wallpaper / launcher. This single flag is the difference between
+      // "see-through to launcher" and "black void". The user reported the
+      // app looking pitch-black even though the activity is translucent —
+      // this is the fix.
+      ensureItem("android:windowShowWallpaper", "true");
+    }
+    return cfg;
+  });
+
+  // Mark MainActivity as android:showWallpaper="true" so the system draws
+  // the user's actual launcher wallpaper *behind* our translucent activity.
+  // Pair with the windowShowWallpaper theme item above. Both are required
+  // on different Android versions.
+  config = withAndroidManifest(config, (cfg) => {
+    const app = cfg.modResults.manifest.application?.[0];
+    if (app && app.activity) {
+      const main = app.activity.find(
+        (a) => a.$ && a.$["android:name"] === ".MainActivity"
+      );
+      if (main && main.$) {
+        main.$["android:showWallpaper"] = "true";
+      }
     }
     return cfg;
   });

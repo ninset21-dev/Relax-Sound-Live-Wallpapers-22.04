@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { ScrollView, View, Text, StyleSheet, Pressable, Alert } from "react-native";
+import { ScrollView, View, Text, StyleSheet, Pressable, Alert, TextInput } from "react-native";
 import { SmoothSlider } from "@/components/SmoothSlider";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
@@ -11,7 +11,7 @@ import { GlassCard } from "@/components/GlassCard";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { theme } from "@/theme/theme";
 import { useApp, Track } from "@/contexts/AppContext";
-import { GENRES, popularByGenre, probeStations, Station, randomFromAllGenres } from "@/services/radio";
+import { GENRES, popularByGenre, probeStations, Station, randomFromAllGenres, searchStations } from "@/services/radio";
 import { Audio } from "@/native";
 
 const FAV_STORAGE_KEY = "relax.favorites.v1";
@@ -23,6 +23,8 @@ export default function MusicScreen() {
   const [genre, setGenre] = useState("relax");
   const [stations, setStations] = useState<Station[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [trackSel, setTrackSel] = useState<Set<string>>(new Set());
   const [favorites, setFavorites] = useState<Station[]>([]);
   const [showFavOnly, setShowFavOnly] = useState(false);
@@ -74,6 +76,35 @@ export default function MusicScreen() {
   }, [app.quality]);
 
   useEffect(() => { loadGenre(genre); }, []);
+
+  // Debounced radio name search (req: "Поиск радиостанций"). When the user
+  // types a query, we hit the Radio Browser /search endpoint with name= and
+  // replace the current list. Empty query restores the genre list.
+  const runSearch = useCallback(async (q: string) => {
+    const myId = ++loadIdRef.current;
+    if (!q.trim()) {
+      // Restore current genre's list.
+      loadGenre(genreRef.current);
+      return;
+    }
+    setLoading(true);
+    try {
+      const fetched = await searchStations({ name: q.trim(), limit: 80 });
+      if (loadIdRef.current !== myId) return;
+      setStations(fetched);
+    } catch {
+      if (loadIdRef.current !== myId) return;
+      setStations([]);
+    } finally {
+      if (loadIdRef.current === myId) setLoading(false);
+    }
+  }, [loadGenre]);
+
+  const onSearchChange = (text: string) => {
+    setSearchQuery(text);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => runSearch(text), 350);
+  };
 
   // Load favorites from AsyncStorage once on mount.
   useEffect(() => {
@@ -268,6 +299,26 @@ export default function MusicScreen() {
           </Pressable>
           {radioOpen && <>
           <Text style={styles.body}>{t("music.radioHint")}</Text>
+          {/* Radio name search (user req): debounced query against the
+              Radio Browser /search endpoint. Empty → restore genre list. */}
+          <View style={styles.searchBox}>
+            <Ionicons name="search" size={16} color={theme.colors.textSecondary} />
+            <TextInput
+              value={searchQuery}
+              onChangeText={onSearchChange}
+              placeholder={t("music.searchPlaceholder")}
+              placeholderTextColor={theme.colors.textMuted}
+              style={styles.searchInput}
+              autoCorrect={false}
+              autoCapitalize="none"
+              returnKeyType="search"
+            />
+            {searchQuery.length > 0 && (
+              <Pressable hitSlop={10} onPress={() => onSearchChange("")}>
+                <Ionicons name="close-circle" size={18} color={theme.colors.textSecondary} />
+              </Pressable>
+            )}
+          </View>
           {/* Quality chips moved into radio menu (req #15). */}
           <View style={[styles.row, { flexWrap: "wrap", marginTop: 4 }]}>
             {(["auto", "low", "med", "high"] as const).map((q) => (
@@ -384,5 +435,14 @@ const styles = StyleSheet.create({
   trackName: { color: theme.colors.textPrimary, fontSize: theme.font.size.sm, flex: 1 },
   station: { flexDirection: "row", alignItems: "center", paddingVertical: 10, gap: 8, borderTopWidth: 1, borderTopColor: theme.colors.border },
   stationActive: { backgroundColor: "rgba(34,197,94,0.12)", borderRadius: 10 },
-  collapseHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }
+  collapseHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  searchBox: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    paddingHorizontal: 12, paddingVertical: 8,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1, borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
+    marginTop: 8
+  },
+  searchInput: { flex: 1, color: theme.colors.textPrimary, fontSize: 14, paddingVertical: 0 }
 });
