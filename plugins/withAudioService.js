@@ -37,11 +37,13 @@ class RelaxAudioService : Service() {
         const val ACTION_DUCK = "${PKG}.audio.DUCK"
         const val ACTION_UNDUCK = "${PKG}.audio.UNDUCK"
         const val ACTION_TOGGLE_REPEAT = "${PKG}.audio.TOGGLE_REPEAT"
+        const val ACTION_SET_REPEAT = "${PKG}.audio.SET_REPEAT"
         const val ACTION_RESUME = "${PKG}.audio.RESUME"
         const val EXTRA_URL = "url"
         const val EXTRA_TITLE = "title"
         const val EXTRA_VOLUME = "volume"
         const val EXTRA_GAPLESS = "gapless"
+        const val EXTRA_REPEAT_MODE = "repeat_mode"
         const val CHANNEL_ID = "relax_audio_channel"
         const val NOTIF_ID = 4711
         const val TAG = "RelaxAudio"
@@ -144,6 +146,18 @@ class RelaxAudioService : Service() {
                 val next = when (cur) { "off" -> "all"; "all" -> "one"; else -> "off" }
                 prefs.edit().putString("repeat_mode", next).apply()
                 player?.repeatMode = when (next) {
+                    "one" -> Player.REPEAT_MODE_ONE
+                    "all" -> Player.REPEAT_MODE_ALL
+                    else -> Player.REPEAT_MODE_OFF
+                }
+                broadcastState()
+            }
+            ACTION_SET_REPEAT -> {
+                // Targeted set (vs ACTION_TOGGLE_REPEAT which cycles).
+                val mode = intent.getStringExtra(EXTRA_REPEAT_MODE) ?: "off"
+                getSharedPreferences("relax_audio", MODE_PRIVATE).edit()
+                    .putString("repeat_mode", mode).apply()
+                player?.repeatMode = when (mode) {
                     "one" -> Player.REPEAT_MODE_ONE
                     "all" -> Player.REPEAT_MODE_ALL
                     else -> Player.REPEAT_MODE_OFF
@@ -633,13 +647,20 @@ class RelaxAudioModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun setRepeatMode(mode: String, promise: Promise) {
         try {
-            reactApplicationContext.getSharedPreferences("relax_audio", Context.MODE_PRIVATE)
-                .edit().putString("repeat_mode", mode).apply()
-            // Ask service to apply immediately if running
             val ctx = reactApplicationContext
-            val i = Intent(ctx, RelaxAudioService::class.java).apply { action = RelaxAudioService.ACTION_TOGGLE_REPEAT }
-            // Avoid toggle: use a dedicated action path via intent extra; service re-reads pref.
-            // (Simpler: just persist — user-visible effect takes effect on next play.)
+            ctx.getSharedPreferences("relax_audio", Context.MODE_PRIVATE)
+                .edit().putString("repeat_mode", mode).apply()
+            // Dispatch a targeted SET_REPEAT (not the cyclic toggle) so a
+            // running service applies the new mode to ExoPlayer in the same
+            // frame instead of waiting for the next play() call.
+            val i = Intent(ctx, RelaxAudioService::class.java).apply {
+                action = RelaxAudioService.ACTION_SET_REPEAT
+                putExtra(RelaxAudioService.EXTRA_REPEAT_MODE, mode)
+            }
+            try {
+                if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i)
+                else ctx.startService(i)
+            } catch (_: Throwable) { /* service may not be running yet — pref read on next start */ }
             promise.resolve(true)
         } catch (t: Throwable) { promise.reject("REPEAT_FAIL", t) }
     }
