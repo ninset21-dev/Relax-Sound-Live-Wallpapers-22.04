@@ -203,7 +203,7 @@ class RelaxAudioService : Service() {
                 val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
                 wakeLock = pm.newWakeLock(
                     android.os.PowerManager.PARTIAL_WAKE_LOCK,
-                    "$PKG:audio"
+                    "${PKG}:audio"
                 ).apply { setReferenceCounted(false) }
             }
             if (wakeLock?.isHeld != true) wakeLock?.acquire(10L * 60L * 60L * 1000L) // 10h cap

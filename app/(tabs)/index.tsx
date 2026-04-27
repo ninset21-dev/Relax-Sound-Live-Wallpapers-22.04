@@ -453,7 +453,7 @@ export default function HomeScreen() {
               label={gpFullscreen ? t("home.gpHide") : t("home.gpOpen", { count: gpPhotos.length })}
               icon="images-outline"
               variant="secondary"
-              onPress={() => setGpFullscreen(true)}
+              onPress={() => setGpFullscreen((v) => !v)}
               style={{ flex: 1 }}
             />
             <PrimaryButton
