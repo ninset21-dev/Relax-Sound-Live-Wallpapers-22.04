@@ -66,9 +66,36 @@ class RelaxAccessibilityModule(ctx: ReactApplicationContext) : ReactContextBaseJ
     @ReactMethod
     fun openAccessibilitySettings(promise: Promise) {
         try {
-            val i = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-            i.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            reactApplicationContext.startActivity(i)
+            val ctx = reactApplicationContext
+            // Prefer the per-service "Installed services" detail page so the
+            // user lands directly on our DoubleTapLockService toggle (req #4).
+            // EXTRA_COMPONENT_NAME accepts a flattenToString of the component.
+            val component = android.content.ComponentName(
+                ctx.packageName,
+                "\${ctx.packageName}.a11y.DoubleTapLockService"
+            )
+            val direct = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                putExtra(":settings:fragment_args_key", component.flattenToString())
+                val args = android.os.Bundle()
+                args.putString(":settings:fragment_args_key", component.flattenToString())
+                putExtra(":settings:show_fragment_args", args)
+            }
+            val resolved = direct.resolveActivity(ctx.packageManager) != null
+            if (resolved) {
+                ctx.startActivity(direct)
+            } else {
+                // Fallback: Installed Services list (some OEMs).
+                val list = Intent("com.android.settings.ACCESSIBILITY_INSTALLED_SERVICES_SETTINGS")
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                if (list.resolveActivity(ctx.packageManager) != null) {
+                    ctx.startActivity(list)
+                } else {
+                    val i = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    ctx.startActivity(i)
+                }
+            }
             promise.resolve(true)
         } catch (t: Throwable) { promise.reject("A11Y_OPEN_FAIL", t) }
     }
@@ -78,6 +105,10 @@ class RelaxAccessibilityModule(ctx: ReactApplicationContext) : ReactContextBaseJ
 }
 `;
 
+// android:description / android:summary surface inside Settings >
+// Accessibility so the user knows what the service does and why it
+// needs to be enabled (req #4 — Google Play requires a clear
+// rationale for accessibility usage).
 const CONFIG_XML = `<?xml version="1.0" encoding="utf-8"?>
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeAllMask"
@@ -85,7 +116,16 @@ const CONFIG_XML = `<?xml version="1.0" encoding="utf-8"?>
     android:accessibilityFlags="flagDefault"
     android:notificationTimeout="100"
     android:canPerformGestures="true"
+    android:description="@string/a11y_double_tap_description"
+    android:summary="@string/a11y_double_tap_summary"
     android:canRetrieveWindowContent="false"/>
+`;
+
+const STRINGS_XML = `<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
+    <string name="a11y_double_tap_summary">Lock the screen by double-tapping the live wallpaper</string>
+    <string name="a11y_double_tap_description">Relax Sound Live Wallpapers uses this Accessibility Service for a single purpose: when you double-tap the home screen, it performs the global "lock screen" action so the display turns off without using the power button. The service does not read screen content, does not track activity, and does not transmit any data. You can disable it at any time in Accessibility settings.</string>
+</resources>
 `;
 
 const withA11yManifest = (config) =>
@@ -123,6 +163,7 @@ const withA11yFiles = (config) =>
       writeNativeSource(root, "a11y/DoubleTapLockService.kt", SERVICE_KT);
       writeNativeSource(root, "native/RelaxAccessibilityModule.kt", MODULE_KT);
       writeResource(root, "xml/double_tap_lock_config.xml", CONFIG_XML);
+      writeResource(root, "values/a11y_strings.xml", STRINGS_XML);
       return config;
     }
   ]);

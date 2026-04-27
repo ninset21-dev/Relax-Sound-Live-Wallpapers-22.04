@@ -1,19 +1,30 @@
 export const theme = {
   colors: {
-    bg: "#0b1f14",
-    bgAlt: "#0f2a1c",
-    surface: "rgba(14, 36, 26, 0.55)",
-    surfaceStrong: "rgba(10, 28, 20, 0.85)",
-    border: "rgba(158, 226, 184, 0.22)",
-    accent: "#11E3A1",
-    accentDim: "#0b9b70",
-    textPrimary: "#E8FFEF",
-    textSecondary: "#9EE2B8",
-    textMuted: "#6fa98a",
+    // Base background (when no wallpaper is set). Dark forest.
+    bg: "#0b1a13",
+    bgAlt: "#0e2419",
+    // Glass card surfaces (semi-transparent over wallpaper/blur).
+    surface: "rgba(14, 30, 22, 0.62)",
+    surfaceStrong: "rgba(10, 22, 16, 0.85)",
+    surfaceLight: "rgba(170, 210, 185, 0.12)",
+    border: "rgba(180, 230, 200, 0.14)",
+    borderStrong: "rgba(180, 230, 200, 0.28)",
+    // Forest green accents matching the design mockups. `accent` is the
+    // bright readable green used for buttons / icons / active chips. The
+    // darker `accentDark` variants are for backgrounds that still need to
+    // feel like the same family.
+    accent: "#22c55e",
+    accentGlow: "#22c55e",
+    accentDim: "#163024",
+    accentStrong: "#2b5a40",
+    accentDark: "#1e3a2a",
+    textPrimary: "#f3f7f5",
+    textSecondary: "#c6d4cc",
+    textMuted: "#8fa698",
     danger: "#ff6b6b",
-    overlay: "rgba(0,0,0,0.35)"
+    overlay: "rgba(0,0,0,0.45)"
   },
-  radii: { xs: 10, sm: 16, md: 22, lg: 28, xl: 36, pill: 999 },
+  radii: { xs: 10, sm: 14, md: 20, lg: 26, xl: 34, pill: 999 },
   spacing: (n: number) => n * 4,
   font: {
     size: { xs: 11, sm: 13, md: 15, lg: 18, xl: 22, xxl: 28 }

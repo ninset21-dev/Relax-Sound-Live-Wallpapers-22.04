@@ -5,9 +5,22 @@ import { Audio, Wallpaper, Widget, Accessibility, onAudioState, onAudioRequest }
 export type MediaItem = { uri: string; type: "image" | "video"; name?: string };
 export type Track = { uri: string; title: string };
 export type PerfMode = "balanced" | "high" | "eco";
-export type StartupSource = "radio" | "local";
 export type Quality = "auto" | "low" | "med" | "high";
-export type EffectKind = "none" | "snow" | "rain" | "bubbles" | "leaves" | "flowers" | "particles" | "fireflies";
+export type RepeatMode = "off" | "all" | "one";
+// Effects fog/frost/aurora/meteor were removed at user request — they did
+// not look right at native scale and added GPU cost.
+export type EffectKind =
+  | "none"
+  | "snow"
+  | "rain"
+  | "bubbles"
+  | "leaves"
+  | "flowers"
+  | "particles"
+  | "fireflies"
+  | "stars"
+  | "cherryblossom"
+  | "plasma";
 
 interface AppState_ {
   mediaLibrary: MediaItem[];
@@ -17,7 +30,6 @@ interface AppState_ {
   volume: number;
   fadeMs: number;
   perfMode: PerfMode;
-  startup: StartupSource;
   quality: Quality;
   effect: EffectKind;
   intensity: number;
@@ -25,19 +37,40 @@ interface AppState_ {
   fps: number;
   autoChangeEnabled: boolean;
   autoChangeSec: number;
-  language: "system" | "ru" | "en";
+  videoAudio: boolean;
+  language:
+    | "system"
+    | "en" | "ru" | "es" | "pt" | "de" | "fr" | "it" | "tr" | "ja" | "zh" | "ar";
   overlayEnabled: boolean;
   a11yEnabled: boolean;
   liveWallpaperActive: boolean;
+  repeatMode: RepeatMode;
+  uiOpacity: number;
+  // URI of the wallpaper image currently applied (drives the blurred
+  // app background so the UI reflects the user's chosen scene).
+  currentWallpaperUri?: string;
+  wallpaperTarget: "home" | "lock" | "both";
+  // "alwaysPlay" — keep music going through SCREEN_OFF and other apps.
+  // "pauseAware" — pause on SCREEN_OFF / when the user opens another app
+  //                and auto-resume on unlock / return to home wallpaper.
+  playbackMode: "alwaysPlay" | "pauseAware";
+  // User-tunable accent color and widget opacity for the in-app theme,
+  // home-screen widget RemoteViews, and floating widget background.
+  accentColor: string;       // hex like "#0EA5A4"
+  widgetOpacity: number;     // 0..1
+  floatingOpacity: number;   // 0..1
 }
 type Ctx = AppState_ & {
   addMedia(items: MediaItem[]): void;
+  setMedia(items: MediaItem[]): void;
+  removeMedia(uri: string): void;
+  removeMediaMany(uris: string[]): void;
   clearMedia(): void;
   setTracks(t: Track[]): void;
+  removeTrack(uri: string): void;
   setVolume(v: number): void;
   setFadeMs(ms: number): void;
   setPerfMode(m: PerfMode): void;
-  setStartup(s: StartupSource): void;
   setQuality(q: Quality): void;
   setEffect(e: EffectKind): void;
   setIntensity(i: number): void;
@@ -45,6 +78,15 @@ type Ctx = AppState_ & {
   setFps(f: number): void;
   setAutoChangeEnabled(b: boolean): void;
   setAutoChangeSec(n: number): void;
+  setVideoAudio(on: boolean): void;
+  toggleRepeat(): void;
+  setLanguage(l: AppState_["language"]): void;
+  setUiOpacity(v: number): void;
+  setWallpaperTarget(t: "home" | "lock" | "both"): void;
+  setPlaybackMode(m: "alwaysPlay" | "pauseAware"): void;
+  setAccentColor(hex: string): void;
+  setWidgetOpacity(v: number): void;
+  setFloatingOpacity(v: number): void;
   play(t: Track): Promise<void>;
   togglePlay(): Promise<void>;
   nextTrack(): Promise<void>;
@@ -53,25 +95,39 @@ type Ctx = AppState_ & {
   refreshA11y(): Promise<void>;
 };
 
+// First-launch defaults requested by user: auto-change ON @ 10s, sound ON,
+// fireflies effect, perf=high, volume 100%. These are written into prefs the
+// first time the app boots (no persisted state) and then frozen in
+// AsyncStorage like normal user settings.
 const Default: AppState_ = {
   mediaLibrary: [],
   tracks: [],
   isPlaying: false,
-  volume: 0.7,
+  volume: 1,
   fadeMs: 2500,
-  perfMode: "balanced",
-  startup: "radio",
+  perfMode: "high",
   quality: "auto",
-  effect: "none",
-  intensity: 0.5,
+  effect: "fireflies",
+  intensity: 0.6,
   speed: 1,
-  fps: 30,
-  autoChangeEnabled: false,
-  autoChangeSec: 60,
+  fps: 60,
+  autoChangeEnabled: true,
+  autoChangeSec: 10,
+  videoAudio: true,
   language: "system",
   overlayEnabled: false,
   a11yEnabled: false,
-  liveWallpaperActive: false
+  liveWallpaperActive: false,
+  repeatMode: "off",
+  // Default to fully transparent app per req — the launcher / live wallpaper
+  // shows through the entire UI. Users can no longer tune this since the
+  // UI Opacity tile was removed in v2.8.0; it's just a permanent passthrough.
+  uiOpacity: 0,
+  wallpaperTarget: "both",
+  playbackMode: "pauseAware",
+  accentColor: "#0EA5A4",
+  widgetOpacity: 0.85,
+  floatingOpacity: 0.85
 };
 
 const AppCtx = createContext<Ctx | null>(null);
@@ -91,15 +147,90 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     (async () => {
       const raw = await AsyncStorage.getItem(STORAGE_KEY);
-      if (raw) { try { setState((p) => ({ ...p, ...JSON.parse(raw) })); } catch {} }
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          // Force uiOpacity=0 always — the UI Opacity tile was removed in
+          // v2.8.0 (req #7) and the app is meant to render fully transparent
+          // so the launcher / live wallpaper shows through. We strip any
+          // legacy persisted value before re-hydrating.
+          if (parsed && typeof parsed === "object") parsed.uiOpacity = 0;
+          setState((p) => ({ ...p, ...parsed }));
+          // Apply persisted language to i18next right after hydrate so all
+          // screens render in the correct language before first paint.
+          if (parsed?.language) {
+            try {
+              const { applyLanguage } = require("@/i18n");
+              applyLanguage(parsed.language);
+            } catch {}
+          }
+        } catch {}
+      }
       try { const active = await Wallpaper.isLiveWallpaperActive(); persist({ liveWallpaperActive: !!active }); } catch {}
       try { const a11y = await Accessibility.isEnabled(); persist({ a11yEnabled: !!a11y }); } catch {}
+      // Sync the persisted playback policy to the native audio service so
+      // the BroadcastReceivers honour it from the very first event.
+      try {
+        const raw2 = await AsyncStorage.getItem(STORAGE_KEY);
+        const parsed2 = raw2 ? JSON.parse(raw2) : null;
+        const mode = (parsed2?.playbackMode === "alwaysPlay" ? "alwaysPlay" : "pauseAware") as
+          "alwaysPlay" | "pauseAware";
+        Audio.setPlaybackMode?.(mode);
+        // Also push the theme (accent + widget/floating opacity) so widgets
+        // pick up the user's persisted choices at boot, not just after the
+        // user re-saves them.
+        const accent = parsed2?.accentColor ?? "#0EA5A4";
+        const widgetOp = typeof parsed2?.widgetOpacity === "number" ? parsed2.widgetOpacity : 0.85;
+        const floatOp = typeof parsed2?.floatingOpacity === "number" ? parsed2.floatingOpacity : 0.85;
+        Widget.setTheme?.(accent, widgetOp, floatOp);
+      } catch {}
+
+      // First-launch autoplay (req #8): start a "Nature Radio Rain"
+      // stream automatically the first time the app opens. We try Radio
+      // Browser first (preferred — names + bitrates), then fall back to
+      // a hardcoded public ambient-rain stream so autoplay works even
+      // if Radio Browser is unreachable on the device's first launch.
+      try {
+        const seen = await AsyncStorage.getItem("relax_first_run_done");
+        if (!seen) {
+          await AsyncStorage.setItem("relax_first_run_done", "1");
+          let url: string | null = null;
+          let title = "Nature Radio Rain";
+          try {
+            const { searchStations } = require("@/services/radio");
+            const candidates: any[] = await searchStations({ name: "Nature Radio Rain", limit: 8 });
+            const fallback: any[] = candidates.length
+              ? candidates
+              : await searchStations({ tag: "rain", limit: 8 });
+            const pick = fallback.find((s: any) => s.url_resolved || s.url);
+            if (pick) {
+              url = pick.url_resolved || pick.url || null;
+              title = (pick.name || "Nature Radio Rain").toString().trim();
+            }
+          } catch {}
+          if (!url) {
+            // Hardcoded public ambient-rain stream as last-resort fallback.
+            // Sleep Radio (radio.sleepradio.org / sleepradio.com) — used
+            // here only because Radio Browser was unreachable on first run.
+            url = "https://stream.zenolive.com/76hsw3ru0eruv";
+          }
+          try { Audio.setPlaylist?.([{ uri: url, title }], 0); } catch {}
+          try { Audio.play(url, title); } catch {}
+          setState((p) => ({ ...p, currentTrack: { uri: url!, title } }));
+        }
+      } catch {}
     })();
   }, []);
 
   useEffect(() => {
     const sub = onAudioState((s) =>
-      setState((p) => ({ ...p, isPlaying: s.isPlaying, volume: s.volume, currentTrack: p.currentTrack ? { ...p.currentTrack, title: s.title || p.currentTrack.title } : p.currentTrack }))
+      setState((p) => ({
+        ...p,
+        isPlaying: s.isPlaying,
+        volume: s.volume,
+        repeatMode: (s.repeatMode as RepeatMode) ?? p.repeatMode,
+        currentTrack: p.currentTrack ? { ...p.currentTrack, title: s.title || p.currentTrack.title } : p.currentTrack
+      }))
     );
     return () => sub.remove();
   }, []);
@@ -129,12 +260,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // SCREEN_OFF and the wallpaper engine's WALLPAPER_VISIBILITY broadcasts,
   // which is the correct source of truth for "is the user actually away".
 
+  // Push audio playlist + image library to native so native-only widget/
+  // floating controls can walk tracks and shuffle wallpapers without the
+  // JS runtime.
+  useEffect(() => {
+    // Only (re)push the local tracks playlist when the currently-selected
+    // item is actually a local track. If the user is listening to a radio
+    // station, music.tsx has already pushed the stations list as the native
+    // playlist and we must not overwrite it (doing so broke widget NEXT/PREV
+    // when listening to radio).
+    const isLocal = state.currentTrack
+      ? state.tracks.some((t) => t.uri === state.currentTrack!.uri)
+      : true;
+    if (!isLocal) return;
+    const idx = state.currentTrack
+      ? Math.max(0, state.tracks.findIndex((t) => t.uri === state.currentTrack!.uri))
+      : 0;
+    Audio.setPlaylist(state.tracks.map((t) => ({ uri: t.uri, title: t.title })), idx).catch(() => {});
+  }, [state.tracks, state.currentTrack]);
+
+  useEffect(() => {
+    Widget.setMediaLibrary(state.mediaLibrary.map((m) => ({ uri: m.uri, type: m.type }))).catch(() => {});
+  }, [state.mediaLibrary]);
+
+  // Auto-change: persist the setting into the widget prefs so the native
+  // LiveWallpaperService engine can rotate media on its own (works in the
+  // background even when the JS bundle isn't running. The native engine's
+  // maybeAutoSwap() drives the actual wallpaper rotation; a duplicate JS
+  // setInterval would race with it and produce double-rate swaps, so we
+  // only push the configuration here and let native do the work.
+  useEffect(() => {
+    Widget.setAutoChange(state.autoChangeEnabled, state.autoChangeSec).catch(() => {});
+  }, [state.autoChangeEnabled, state.autoChangeSec, state.mediaLibrary]);
+
   const api: Ctx = useMemo(
     () => ({
       ...state,
       addMedia: (items) => persist({ mediaLibrary: [...state.mediaLibrary, ...items] }),
+      setMedia: (items) => persist({ mediaLibrary: items }),
+      removeMedia: (uri) =>
+        persist({ mediaLibrary: state.mediaLibrary.filter((m) => m.uri !== uri) }),
+      removeMediaMany: (uris) => {
+        const set = new Set(uris);
+        persist({ mediaLibrary: state.mediaLibrary.filter((m) => !set.has(m.uri)) });
+      },
       clearMedia: () => persist({ mediaLibrary: [] }),
       setTracks: (t) => persist({ tracks: t }),
+      removeTrack: (uri) => {
+        const tracks = state.tracks.filter((t) => t.uri !== uri);
+        if (state.currentTrack?.uri === uri) {
+          persist({ tracks, currentTrack: undefined });
+        } else {
+          persist({ tracks });
+        }
+      },
       setVolume: (v) => {
         persist({ volume: v });
         Audio.setVolume(v).catch(() => {});
@@ -147,7 +326,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         persist({ perfMode: m, fps: newFps, intensity: newIntensity });
         Wallpaper.updateWallpaperParams({ fps: newFps, intensity: newIntensity, speed: state.speed, effect: state.effect }).catch(() => {});
       },
-      setStartup: (s) => persist({ startup: s }),
       setQuality: (q) => persist({ quality: q }),
       setEffect: (e) => {
         persist({ effect: e });
@@ -161,10 +339,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setFps: (f) => { persist({ fps: f }); Wallpaper.updateWallpaperParams({ fps: f }).catch(() => {}); },
       setAutoChangeEnabled: (b) => persist({ autoChangeEnabled: b }),
       setAutoChangeSec: (n) => persist({ autoChangeSec: Math.max(10, n) }),
+      setVideoAudio: (on) => {
+        persist({ videoAudio: on });
+        Wallpaper.updateWallpaperParams({ videoAudio: on }).catch(() => {});
+      },
+      toggleRepeat: () => {
+        // Cycle locally so the next AsyncStorage persist captures it (so
+        // the UI shows the right icon even on a cold start before the
+        // service has had a chance to broadcast). Native service owns the
+        // authoritative state and will broadcast back if it disagrees.
+        const next: RepeatMode =
+          state.repeatMode === "off" ? "all" : state.repeatMode === "all" ? "one" : "off";
+        persist({ repeatMode: next });
+        Audio.toggleRepeat?.().catch(() => {});
+      },
+      setLanguage: (l) => {
+        persist({ language: l });
+        try {
+          // Lazy import to avoid circular deps at module init time.
+          const { applyLanguage } = require("@/i18n");
+          applyLanguage(l);
+        } catch {}
+      },
+      // Opacity is now 0-100% (shows through to underlying wallpaper when
+      // lowered). Previous 30% floor was removed per user request.
+      setUiOpacity: (v) => persist({ uiOpacity: Math.max(0, Math.min(1, v)) }),
+      setWallpaperTarget: (t) => persist({ wallpaperTarget: t }),
+      setPlaybackMode: (m) => {
+        persist({ playbackMode: m });
+        try { Audio.setPlaybackMode?.(m); } catch {}
+      },
+      setAccentColor: (hex) => {
+        persist({ accentColor: hex });
+        try { Widget.setTheme?.(hex, state.widgetOpacity, state.floatingOpacity); } catch {}
+      },
+      setWidgetOpacity: (v) => {
+        const clamped = Math.max(0.2, Math.min(1, v));
+        persist({ widgetOpacity: clamped });
+        try { Widget.setTheme?.(state.accentColor, clamped, state.floatingOpacity); } catch {}
+      },
+      setFloatingOpacity: (v) => {
+        const clamped = Math.max(0.2, Math.min(1, v));
+        persist({ floatingOpacity: clamped });
+        try { Widget.setTheme?.(state.accentColor, state.widgetOpacity, clamped); } catch {}
+      },
       play: async (t) => {
+        // If something is already playing, treat this as a track/station
+        // switch — use the short fade-in path so the user doesn't perceive
+        // a pause between the two items.
+        const switching = state.isPlaying || !!state.currentTrack;
         persist({ currentTrack: t });
         try {
-          await Audio.play(t.uri, t.title);
+          if (switching && Audio.playSwitch) await Audio.playSwitch(t.uri, t.title);
+          else await Audio.play(t.uri, t.title);
           await Widget.updateWidgetState(t.title, state.volume, "audio");
         } catch (e) { console.warn("play fail", e); }
       },
@@ -176,7 +403,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           : -1;
         const next = state.tracks[(idx + 1) % state.tracks.length];
         persist({ currentTrack: next });
-        try { await Audio.play(next.uri, next.title); } catch {}
+        // Use playSwitch (short fade-in) so the user doesn't perceive a pause
+        // between the previous and next track.
+        try {
+          if (Audio.playSwitch) await Audio.playSwitch(next.uri, next.title);
+          else await Audio.play(next.uri, next.title);
+        } catch {}
       },
       prevTrack: async () => {
         if (state.tracks.length === 0) return;
@@ -185,26 +417,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           : -1;
         const prev = state.tracks[(idx - 1 + state.tracks.length) % state.tracks.length];
         persist({ currentTrack: prev });
-        try { await Audio.play(prev.uri, prev.title); } catch {}
+        try {
+          if (Audio.playSwitch) await Audio.playSwitch(prev.uri, prev.title);
+          else await Audio.play(prev.uri, prev.title);
+        } catch {}
       },
       applyLiveWallpaper: async (mode) => {
         try {
           const video = state.mediaLibrary.find((m) => m.type === "video");
           const image = state.mediaLibrary.find((m) => m.type === "image");
+          // For LOCK-only installs Android needs the image applied as a
+          // static wallpaper to the LOCK surface BEFORE the live wallpaper
+          // intent (otherwise Android paints the live wallpaper over lock
+          // anyway). For HOME-only we do the same with the other surface.
+          if (mode === "lock" && image) {
+            await Wallpaper.setStaticWallpaper(image.uri, "lock");
+            // Skip the live-wallpaper picker so the lock-screen static
+            // survives — live wallpapers always bind to HOME on Android
+            // <14, which would clobber the dedicated lock image.
+            persist({ liveWallpaperActive: true, currentWallpaperUri: image.uri });
+            return;
+          }
           await Wallpaper.setLiveWallpaper({
             videoUri: video?.uri ?? null,
             imageUri: image?.uri ?? null,
+            videoAudio: state.videoAudio,
             effect: state.effect,
             intensity: state.intensity,
             speed: state.speed,
             fps: state.fps
           });
-          if (mode !== "both" && image) {
-            // fall back to static for the *other* surface so live/static are split
-            const other: "home" | "lock" = mode === "home" ? "lock" : "home";
-            await Wallpaper.setStaticWallpaper(image.uri, other);
+          if (mode === "home" && image) {
+            // HOME-only: keep an explicit static on LOCK so the live
+            // wallpaper doesn't bleed onto the lock screen.
+            await Wallpaper.setStaticWallpaper(image.uri, "lock");
           }
-          persist({ liveWallpaperActive: true });
+          persist({
+            liveWallpaperActive: true,
+            currentWallpaperUri: image?.uri ?? state.currentWallpaperUri
+          });
         } catch (e) { console.warn("apply wallpaper fail", e); }
       },
       refreshA11y: async () => {

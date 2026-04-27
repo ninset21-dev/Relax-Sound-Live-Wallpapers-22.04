@@ -33,6 +33,28 @@ class RelaxFloatingService : Service() {
     private var collapsed: Boolean = false
     private var layoutParams: WindowManager.LayoutParams? = null
 
+    private val stateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(ctx: Context, intent: Intent) {
+            if (intent.action == RelaxAudioService.ACTION_STATE) {
+                val vol = intent.getFloatExtra("volume", 0.7f)
+                val title = intent.getStringExtra("title") ?: "Relax Sound"
+                val isPlaying = intent.getBooleanExtra("isPlaying", false)
+                overlay?.let { v ->
+                    try {
+                        val barId = R.id::class.java.getField("volume_bar").getInt(null)
+                        v.findViewById<ProgressBar>(barId).progress = (vol * 100).toInt()
+                        val titleId = R.id::class.java.getField("overlay_title").getInt(null)
+                        v.findViewById<TextView>(titleId).text = title
+                        val playId = R.id::class.java.getField("btn_toggle_play").getInt(null)
+                        v.findViewById<ImageButton>(playId).setImageResource(
+                            if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
+                        )
+                    } catch (_: Throwable) {}
+                }
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -44,6 +66,13 @@ class RelaxFloatingService : Service() {
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setOngoing(true)
             .build())
+        try {
+            val filter = IntentFilter(RelaxAudioService.ACTION_STATE)
+            if (Build.VERSION.SDK_INT >= 33)
+                registerReceiver(stateReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            else
+                registerReceiver(stateReceiver, filter)
+        } catch (_: Throwable) {}
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -70,8 +99,10 @@ class RelaxFloatingService : Service() {
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         )
-        params.gravity = Gravity.TOP or Gravity.START
-        params.x = 40; params.y = 400
+        // Default position: bottom-right corner with a small inset so the
+        // bubble doesn't kiss the navigation bar / screen edge.
+        params.gravity = Gravity.BOTTOM or Gravity.END
+        params.x = 24; params.y = 160
         layoutParams = params
         wm?.addView(view, params)
         overlay = view
@@ -81,6 +112,13 @@ class RelaxFloatingService : Service() {
     private fun removeOverlay() {
         try { overlay?.let { wm?.removeView(it) } } catch (_: Throwable) {}
         overlay = null
+    }
+
+    private fun startAudio(action: String) {
+        val i = Intent(this, RelaxAudioService::class.java).apply { this.action = action }
+        try {
+            if (Build.VERSION.SDK_INT >= 26) startForegroundService(i) else startService(i)
+        } catch (_: Throwable) {}
     }
 
     private fun toggleCollapsed() {
@@ -98,26 +136,30 @@ class RelaxFloatingService : Service() {
         v.findViewById<View>(id("btn_collapse")).setOnClickListener { toggleCollapsed() }
         v.findViewById<View>(id("overlay_bubble")).setOnClickListener { toggleCollapsed() }
         v.findViewById<View>(id("btn_toggle_play")).setOnClickListener {
-            val i = Intent(this, RelaxAudioService::class.java).apply { action = RelaxAudioService.ACTION_TOGGLE }
-            startService(i)
+            startAudio(RelaxAudioService.ACTION_TOGGLE)
         }
+        // New: explicit track navigation buttons on the floating widget.
+        try { v.findViewById<View>(id("btn_prev_track")).setOnClickListener { startAudio(RelaxAudioService.ACTION_PREV) } } catch (_: Throwable) {}
+        try { v.findViewById<View>(id("btn_next_track")).setOnClickListener { startAudio(RelaxAudioService.ACTION_NEXT) } } catch (_: Throwable) {}
         v.findViewById<View>(id("btn_close")).setOnClickListener {
             removeOverlay(); stopSelf()
         }
 
+        // Vertical swipe slider: the bar is taller than wide, so drive volume
+        // from (1 - y/height). Tap anywhere on it also snaps to that value.
         val slider = v.findViewById<View>(id("volume_slider"))
         slider.setOnTouchListener(object : View.OnTouchListener {
             override fun onTouch(view: View, ev: MotionEvent): Boolean {
                 when (ev.action) {
                     MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
-                        val frac = (ev.x / view.width.toFloat()).coerceIn(0f, 1f)
+                        val frac = (1f - (ev.y / view.height.toFloat())).coerceIn(0f, 1f)
                         val progress = (frac * 100).toInt()
                         v.findViewById<ProgressBar>(id("volume_bar")).progress = progress
                         val i = Intent(this@RelaxFloatingService, RelaxAudioService::class.java).apply {
                             action = RelaxAudioService.ACTION_VOLUME
                             putExtra(RelaxAudioService.EXTRA_VOLUME, frac)
                         }
-                        startService(i)
+                        if (Build.VERSION.SDK_INT >= 26) startForegroundService(i) else startService(i)
                         return true
                     }
                 }
@@ -134,8 +176,11 @@ class RelaxFloatingService : Service() {
                 when (ev.action) {
                     MotionEvent.ACTION_DOWN -> { ix = p.x; iy = p.y; itx = ev.rawX; ity = ev.rawY }
                     MotionEvent.ACTION_MOVE -> {
-                        p.x = ix + (ev.rawX - itx).toInt()
-                        p.y = iy + (ev.rawY - ity).toInt()
+                        // Gravity is BOTTOM|END so x increases toward the LEFT
+                        // and y increases toward the TOP. Invert the raw deltas
+                        // so dragging the bubble feels natural.
+                        p.x = (ix - (ev.rawX - itx).toInt()).coerceAtLeast(0)
+                        p.y = (iy - (ev.rawY - ity).toInt()).coerceAtLeast(0)
                         wm?.updateViewLayout(v, p)
                     }
                 }
@@ -154,7 +199,10 @@ class RelaxFloatingService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
-    override fun onDestroy() { removeOverlay(); super.onDestroy() }
+    override fun onDestroy() {
+        try { unregisterReceiver(stateReceiver) } catch (_: Throwable) {}
+        removeOverlay(); super.onDestroy()
+    }
 }
 `;
 
@@ -212,55 +260,96 @@ class RelaxFloatingModule(ctx: ReactApplicationContext) : ReactContextBaseJavaMo
 const OVERLAY_LAYOUT = `<?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="wrap_content" android:layout_height="wrap_content">
-    <ImageView android:id="@+id/overlay_bubble"
-        android:layout_width="56dp" android:layout_height="56dp"
-        android:background="@drawable/bubble_background"
-        android:padding="10dp"
-        android:src="@android:drawable/ic_menu_compass"
-        android:tint="#E8FFEF"
+    <!-- Collapsed: a minimal semi-transparent dot, no picture. Tap to expand. -->
+    <View android:id="@+id/overlay_bubble"
+        android:layout_width="28dp" android:layout_height="28dp"
+        android:background="@drawable/bubble_dot"
         android:visibility="gone"/>
     <LinearLayout android:id="@+id/overlay_expanded"
-        android:layout_width="260dp" android:layout_height="wrap_content"
-        android:orientation="vertical" android:padding="10dp"
+        android:layout_width="78dp" android:layout_height="wrap_content"
+        android:orientation="vertical" android:padding="8dp"
+        android:gravity="center_horizontal"
         android:background="@drawable/bubble_background">
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:orientation="horizontal" android:gravity="center_vertical">
-            <ImageButton android:id="@+id/btn_toggle_play"
-                android:layout_width="36dp" android:layout_height="36dp"
-                android:background="@android:color/transparent"
-                android:src="@android:drawable/ic_media_play" android:tint="#E8FFEF"/>
-            <TextView android:layout_width="0dp" android:layout_weight="1"
-                android:layout_height="wrap_content" android:paddingStart="6dp"
-                android:text="Relax Sound" android:textColor="#E8FFEF" android:textSize="12sp"/>
-            <ImageButton android:id="@+id/btn_collapse"
-                android:layout_width="32dp" android:layout_height="32dp"
-                android:background="@android:color/transparent"
-                android:src="@android:drawable/arrow_down_float" android:tint="#9EE2B8"/>
-            <ImageButton android:id="@+id/btn_close"
-                android:layout_width="32dp" android:layout_height="32dp"
-                android:background="@android:color/transparent"
-                android:src="@android:drawable/ic_menu_close_clear_cancel" android:tint="#9EE2B8"/>
-        </LinearLayout>
+        <!-- Close button FIRST (top). User request: "кнопка удаления виджета
+             должна находиться сверху". -->
+        <ImageButton android:id="@+id/btn_close"
+            android:layout_width="28dp" android:layout_height="28dp"
+            android:background="@android:color/transparent"
+            android:src="@android:drawable/ic_menu_close_clear_cancel" android:tint="#FFB4B4"/>
+        <TextView android:id="@+id/overlay_title"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Relax"
+            android:gravity="center"
+            android:maxLines="2"
+            android:layout_marginTop="4dp"
+            android:ellipsize="end"
+            android:textColor="#E8FFEF" android:textSize="10sp"/>
+        <ImageButton android:id="@+id/btn_prev_track"
+            android:layout_width="40dp" android:layout_height="40dp"
+            android:layout_marginTop="6dp"
+            android:background="@android:color/transparent"
+            android:src="@android:drawable/ic_media_previous" android:tint="#9EE2B8"/>
+        <ImageButton android:id="@+id/btn_toggle_play"
+            android:layout_width="44dp" android:layout_height="44dp"
+            android:layout_marginTop="2dp"
+            android:background="@android:color/transparent"
+            android:src="@android:drawable/ic_media_play" android:tint="#E8FFEF"/>
+        <ImageButton android:id="@+id/btn_next_track"
+            android:layout_width="40dp" android:layout_height="40dp"
+            android:layout_marginTop="2dp"
+            android:background="@android:color/transparent"
+            android:src="@android:drawable/ic_media_next" android:tint="#9EE2B8"/>
         <FrameLayout android:id="@+id/volume_slider"
-            android:layout_width="match_parent" android:layout_height="24dp"
-            android:layout_marginTop="6dp">
+            android:layout_width="20dp" android:layout_height="110dp"
+            android:layout_marginTop="8dp">
             <ProgressBar android:id="@+id/volume_bar"
                 style="@android:style/Widget.ProgressBar.Horizontal"
-                android:layout_width="match_parent" android:layout_height="12dp"
-                android:layout_gravity="center_vertical"
+                android:layout_width="110dp" android:layout_height="12dp"
+                android:layout_gravity="center"
+                android:rotation="270"
                 android:max="100" android:progress="70"/>
         </FrameLayout>
+        <!-- Collapse (minimize) at the bottom — keeps the dangerous "close" up top. -->
+        <ImageButton android:id="@+id/btn_collapse"
+            android:layout_width="28dp" android:layout_height="28dp"
+            android:layout_marginTop="6dp"
+            android:background="@android:color/transparent"
+            android:src="@android:drawable/arrow_down_float" android:tint="#9EE2B8"/>
     </LinearLayout>
 </FrameLayout>
 `;
 
+// Floating expanded panel — translucent forest gradient with a glassmorphic
+// accent ring (req #2 + req #8: matches in-app GlassCard look).
 const BUBBLE_BG = `<?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-  <solid android:color="#E60b1f14"/>
-  <corners android:radius="28dp"/>
-  <stroke android:width="1dp" android:color="#88 11E3A1" />
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+  <item>
+    <shape android:shape="rectangle">
+      <solid android:color="#3322c55e"/>
+      <corners android:radius="30dp"/>
+    </shape>
+  </item>
+  <item android:left="2dp" android:top="2dp" android:right="2dp" android:bottom="2dp">
+    <shape android:shape="rectangle">
+      <gradient
+        android:startColor="#B30b1f14"
+        android:endColor="#800b1f14"
+        android:angle="270"/>
+      <corners android:radius="28dp"/>
+      <stroke android:width="1dp" android:color="#5522c55e"/>
+    </shape>
+  </item>
+</layer-list>
+`;
+
+// Collapsed bubble: a small translucent green dot with soft ring.
+// User asked for transparent / no picture.
+const BUBBLE_DOT = `<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+  <solid android:color="#3322c55e"/>
+  <stroke android:width="1dp" android:color="#9922c55e"/>
 </shape>
-`.replace("#88 11", "#8811");
+`;
 
 const withFloatingManifest = (config) =>
   withAndroidManifest(config, (config) => {
@@ -295,6 +384,7 @@ const withFloatingFiles = (config) =>
       writeNativeSource(root, "native/RelaxFloatingModule.kt", MODULE_KT);
       writeResource(root, "layout/relax_floating_overlay.xml", OVERLAY_LAYOUT);
       writeResource(root, "drawable/bubble_background.xml", BUBBLE_BG);
+      writeResource(root, "drawable/bubble_dot.xml", BUBBLE_DOT);
       return config;
     }
   ]);

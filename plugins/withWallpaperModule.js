@@ -54,15 +54,91 @@ class RelaxWallpaperModule(reactContext: ReactApplicationContext) :
      * Android enforces one live wallpaper at a time; HOME vs LOCK distinction is honored by the OS —
      * static wallpaper on LOCK + our live on HOME is the recommended split.
      */
+    /**
+     * Copy a content:// video to the app's private storage so the live
+     * wallpaper service — which runs in a separate window-manager context —
+     * can always read it. Without this, content URIs from MediaLibrary or
+     * DocumentPicker frequently come back as "Permission Denial" inside the
+     * wallpaper engine (req #5 -- "video wallpaper not installing"). Returns
+     * the absolute file path on success or null to fall back to the
+     * original URI.
+     */
+    private fun materializeVideo(srcUri: String): String? {
+        return try {
+            val ctx = reactApplicationContext
+            if (srcUri.startsWith("file://")) return srcUri
+            if (srcUri.startsWith("/")) return "file://" + srcUri
+            // Use a hash-suffixed filename so applying a *different* video
+            // produces a different file path — the wallpaper engine caches
+            // by URI string, so reusing the same path would let the old
+            // clip keep playing (req #11 regression: video wallpaper not
+            // updating). Also forces a fresh file even if the previous
+            // copy was partial / truncated by a crash.
+            val hash = Integer.toHexString(srcUri.hashCode())
+            val dest = File(ctx.filesDir, "wallpaper_video_$hash.mp4")
+            dest.parentFile?.mkdirs()
+            // Always re-copy when the cached file is empty, missing or
+            // implausibly small (<8 KB — anything that can't even hold a
+            // valid mp4 atom). This catches partial copies left by an
+            // earlier crash.
+            if (!dest.exists() || dest.length() < 8 * 1024L) {
+                val input = ctx.contentResolver.openInputStream(Uri.parse(srcUri))
+                    ?: run {
+                        android.util.Log.e("RelaxWP", "openInputStream failed for $srcUri")
+                        return null
+                    }
+                input.use { i -> dest.outputStream().use { o -> i.copyTo(o) } }
+            }
+            if (!dest.exists() || dest.length() == 0L) {
+                android.util.Log.e("RelaxWP", "materialized video is empty for $srcUri")
+                return null
+            }
+            "file://" + dest.absolutePath
+        } catch (t: Throwable) {
+            android.util.Log.e("RelaxWP", "materializeVideo failed", t)
+            null
+        }
+    }
+
+    private fun materializeImage(srcUri: String): String? {
+        return try {
+            val ctx = reactApplicationContext
+            if (srcUri.startsWith("file://") || srcUri.startsWith("/")) return srcUri
+            val hash = Integer.toHexString(srcUri.hashCode())
+            val dest = File(ctx.filesDir, "wallpaper_image_$hash.bin")
+            dest.parentFile?.mkdirs()
+            if (!dest.exists() || dest.length() == 0L) {
+                val input = ctx.contentResolver.openInputStream(Uri.parse(srcUri)) ?: return null
+                input.use { i -> dest.outputStream().use { o -> i.copyTo(o) } }
+            }
+            if (!dest.exists() || dest.length() == 0L) return null
+            "file://" + dest.absolutePath
+        } catch (_: Throwable) { null }
+    }
+
     @ReactMethod
     fun setLiveWallpaper(params: ReadableMap, promise: Promise) {
         try {
-            val video = if (params.hasKey("videoUri")) params.getString("videoUri") else null
-            val image = if (params.hasKey("imageUri")) params.getString("imageUri") else null
+            val rawVideo = if (params.hasKey("videoUri")) params.getString("videoUri") else null
+            val rawImage = if (params.hasKey("imageUri")) params.getString("imageUri") else null
             val effect = if (params.hasKey("effect")) params.getString("effect") else "none"
             val intensity = if (params.hasKey("intensity")) params.getDouble("intensity").toFloat() else 0.5f
             val speed = if (params.hasKey("speed")) params.getDouble("speed").toFloat() else 1.0f
             val fps = if (params.hasKey("fps")) params.getInt("fps") else 30
+            val videoAudio = if (params.hasKey("videoAudio")) params.getBoolean("videoAudio") else false
+            // Materialize content:// URIs to app-private file paths so the
+            // wallpaper service can always read them. If materialize fails
+            // we still pass the source URI through — it may be a usable
+            // file:// path. The engine logs an error if it can't open it.
+            val video = rawVideo?.takeIf { it.isNotBlank() }?.let { src ->
+                materializeVideo(src) ?: run {
+                    android.util.Log.w("RelaxWP", "video materialize fell back to source: $src")
+                    src
+                }
+            }
+            val image = rawImage?.takeIf { it.isNotBlank() }?.let { src ->
+                materializeImage(src) ?: src
+            }
             prefs.edit()
                 .putString("wallpaper_video_uri", video)
                 .putString("wallpaper_image_uri", image)
@@ -70,6 +146,7 @@ class RelaxWallpaperModule(reactContext: ReactApplicationContext) :
                 .putFloat("effect_intensity", intensity)
                 .putFloat("effect_speed", speed)
                 .putInt("effect_fps", fps)
+                .putBoolean("wallpaper_video_audio", videoAudio)
                 .apply()
             val intent = Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
                 putExtra(
@@ -98,6 +175,7 @@ class RelaxWallpaperModule(reactContext: ReactApplicationContext) :
             if (params.hasKey("intensity")) e.putFloat("effect_intensity", params.getDouble("intensity").toFloat())
             if (params.hasKey("speed")) e.putFloat("effect_speed", params.getDouble("speed").toFloat())
             if (params.hasKey("fps")) e.putInt("effect_fps", params.getInt("fps"))
+            if (params.hasKey("videoAudio")) e.putBoolean("wallpaper_video_audio", params.getBoolean("videoAudio"))
             e.apply()
             promise.resolve(true)
         } catch (t: Throwable) { promise.reject("UPDATE_PARAMS_FAILED", t) }
