@@ -55,22 +55,33 @@ class RelaxAudioService : Service() {
     private var appVisible: Boolean = true
     private val handler = Handler(Looper.getMainLooper())
 
+    /**
+     * Playback policy (user req):
+     *   "alwaysPlay" — music keeps playing through SCREEN_OFF and when the
+     *                  user opens other apps. Never pauses automatically;
+     *                  only the user's explicit pause / audio focus loss
+     *                  from another player can stop it.
+     *   "pauseAware" (default) — music pauses on SCREEN_OFF and when the
+     *                  user opens another app; resumes on unlock and when
+     *                  returning to the home screen with our wallpaper.
+     */
+    private fun playbackMode(): String =
+        getSharedPreferences("relax_audio", MODE_PRIVATE).getString("playback_mode", "pauseAware") ?: "pauseAware"
+
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context, intent: Intent) {
+            val mode = playbackMode()
             when (intent.action) {
-                // SCREEN_OFF pauses (user req): we set was_playing=true
-                // separately so unlock can resume. We don't go through
-                // pauseInternal(userInitiated=true) because that would
-                // wipe was_playing — instead we use a transient pause
-                // path that preserves the resume flag.
-                Intent.ACTION_SCREEN_OFF -> pauseInternal(userInitiated = false)
-                Intent.ACTION_USER_PRESENT, Intent.ACTION_SCREEN_ON -> {
+                Intent.ACTION_SCREEN_OFF -> {
+                    if (mode == "pauseAware") pauseInternal(userInitiated = false)
+                }
+                Intent.ACTION_USER_PRESENT -> {
+                    // Resume on UNLOCK only (USER_PRESENT) — not on SCREEN_ON,
+                    // which fires when the user just wakes the lock screen
+                    // without unlocking. Respect explicit user pause
+                    // (was_playing=false).
                     val wasPlaying = getSharedPreferences("relax_audio", MODE_PRIVATE)
                         .getBoolean("was_playing", false)
-                    // On unlock we resume only if the user had not explicitly
-                    // tapped pause. If they did (was_playing=false), respect
-                    // that. The "user is on home screen" auto-resume is also
-                    // handled by the wallpaper visibility receiver below.
                     if (wasPlaying && (player?.isPlaying != true)) {
                         appVisible = true
                         fadeInAndResume()
@@ -83,21 +94,22 @@ class RelaxAudioService : Service() {
     private val visibilityReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context, intent: Intent) {
             appVisible = intent.getBooleanExtra("visible", true)
-            // We do NOT pause when the user goes to another app — music
-            // should keep playing in the background like a normal audio
-            // player. SCREEN_OFF still pauses (handled above).
-            //
-            // On returning to the home screen (visible=true) we auto-
-            // resume IF the user was playing before (was_playing=true).
-            // We must respect explicit user pauses: if they tapped pause,
-            // was_playing=false and we leave it paused.
+            val mode = playbackMode()
             if (appVisible) {
+                // Returning to the home screen with our wallpaper installed:
+                // auto-resume if we were playing before (was_playing=true).
                 val prefs = getSharedPreferences("relax_audio", MODE_PRIVATE)
                 val wasPlaying = prefs.getBoolean("was_playing", false)
                 if (wasPlaying && (player?.isPlaying != true)) {
                     fadeInAndResume()
                 }
+            } else if (mode == "pauseAware") {
+                // User opened another app (lost wallpaper visibility):
+                // pause-aware mode pauses while preserving was_playing so we
+                // can auto-resume the moment they return home.
+                pauseInternal(userInitiated = false)
             }
+            // alwaysPlay mode: ignore visibility=false entirely.
         }
     }
 
@@ -121,6 +133,10 @@ class RelaxAudioService : Service() {
         // If started via startForegroundService (API 26+), we MUST call startForeground
         // within 5s — even for actions that don't start playback.
         try { startForeground(NOTIF_ID, buildNotification()) } catch (_: Throwable) {}
+        // Acquire a partial wake lock while playing so the system doesn't
+        // doze the radio off after the screen has been off for a while.
+        // Released in onDestroy() and on explicit pause.
+        ensureWakeLock()
         when (intent?.action) {
             ACTION_PLAY -> {
                 val url = intent.getStringExtra(EXTRA_URL) ?: return START_NOT_STICKY
@@ -166,7 +182,35 @@ class RelaxAudioService : Service() {
                 broadcastState()
             }
         }
-        return START_STICKY
+        // START_REDELIVER_INTENT — if Android kills us mid-playback, the
+        // last delivered intent is re-delivered when the system restarts the
+        // service, so the widget's "play this URL" action survives a kill
+        // (req #10: radio widget control over time).
+        return START_REDELIVER_INTENT
+    }
+
+    /**
+     * Lazy-acquired PARTIAL_WAKE_LOCK that keeps the CPU running while the
+     * radio plays. Without this, after ~10-20 minutes of screen-off the
+     * system doze policy can pause our audio service or stop delivering
+     * widget intents, which the user observed as "radio stops responding
+     * after a while" (req #10).
+     */
+    private var wakeLock: android.os.PowerManager.WakeLock? = null
+    private fun ensureWakeLock() {
+        try {
+            if (wakeLock == null) {
+                val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+                wakeLock = pm.newWakeLock(
+                    android.os.PowerManager.PARTIAL_WAKE_LOCK,
+                    "$PKG:audio"
+                ).apply { setReferenceCounted(false) }
+            }
+            if (wakeLock?.isHeld != true) wakeLock?.acquire(10L * 60L * 60L * 1000L) // 10h cap
+        } catch (_: Throwable) {}
+    }
+    private fun releaseWakeLock() {
+        try { if (wakeLock?.isHeld == true) wakeLock?.release() } catch (_: Throwable) {}
     }
 
     /**
@@ -522,7 +566,20 @@ class RelaxAudioService : Service() {
         try { unregisterReceiver(screenReceiver) } catch (_: Throwable) {}
         try { unregisterReceiver(visibilityReceiver) } catch (_: Throwable) {}
         player?.release(); player = null; releaseFocus()
+        releaseWakeLock()
         super.onDestroy()
+    }
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        // Restart the service if the user swipes the app from recents while
+        // music is playing — keeps the widget controls live (req #10).
+        try {
+            val prefs = getSharedPreferences("relax_audio", MODE_PRIVATE)
+            if (prefs.getBoolean("was_playing", false)) {
+                val i = Intent(applicationContext, this::class.java)
+                if (Build.VERSION.SDK_INT >= 26) startForegroundService(i) else startService(i)
+            }
+        } catch (_: Throwable) {}
+        super.onTaskRemoved(rootIntent)
     }
 }
 `;
@@ -707,6 +764,21 @@ class RelaxAudioModule(reactContext: ReactApplicationContext) :
             // (Simpler: just persist — user-visible effect takes effect on next play.)
             promise.resolve(true)
         } catch (t: Throwable) { promise.reject("REPEAT_FAIL", t) }
+    }
+
+    /**
+     * Persist the playback policy mode. Accepts "alwaysPlay" | "pauseAware".
+     * The audio service re-reads this pref on each receiver event, so the
+     * change takes effect immediately without restarting playback.
+     */
+    @ReactMethod
+    fun setPlaybackMode(mode: String, promise: Promise) {
+        try {
+            val normalized = if (mode == "alwaysPlay") "alwaysPlay" else "pauseAware"
+            reactApplicationContext.getSharedPreferences("relax_audio", Context.MODE_PRIVATE)
+                .edit().putString("playback_mode", normalized).apply()
+            promise.resolve(normalized)
+        } catch (t: Throwable) { promise.reject("MODE_FAIL", t) }
     }
 
     private fun action(a: String, promise: Promise) {

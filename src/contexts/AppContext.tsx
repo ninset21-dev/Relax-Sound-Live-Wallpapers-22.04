@@ -50,6 +50,15 @@ interface AppState_ {
   // app background so the UI reflects the user's chosen scene).
   currentWallpaperUri?: string;
   wallpaperTarget: "home" | "lock" | "both";
+  // "alwaysPlay" — keep music going through SCREEN_OFF and other apps.
+  // "pauseAware" — pause on SCREEN_OFF / when the user opens another app
+  //                and auto-resume on unlock / return to home wallpaper.
+  playbackMode: "alwaysPlay" | "pauseAware";
+  // User-tunable accent color and widget opacity for the in-app theme,
+  // home-screen widget RemoteViews, and floating widget background.
+  accentColor: string;       // hex like "#0EA5A4"
+  widgetOpacity: number;     // 0..1
+  floatingOpacity: number;   // 0..1
 }
 type Ctx = AppState_ & {
   addMedia(items: MediaItem[]): void;
@@ -74,6 +83,10 @@ type Ctx = AppState_ & {
   setLanguage(l: AppState_["language"]): void;
   setUiOpacity(v: number): void;
   setWallpaperTarget(t: "home" | "lock" | "both"): void;
+  setPlaybackMode(m: "alwaysPlay" | "pauseAware"): void;
+  setAccentColor(hex: string): void;
+  setWidgetOpacity(v: number): void;
+  setFloatingOpacity(v: number): void;
   play(t: Track): Promise<void>;
   togglePlay(): Promise<void>;
   nextTrack(): Promise<void>;
@@ -110,7 +123,11 @@ const Default: AppState_ = {
   // shows through the entire UI. Users can no longer tune this since the
   // UI Opacity tile was removed in v2.8.0; it's just a permanent passthrough.
   uiOpacity: 0,
-  wallpaperTarget: "both"
+  wallpaperTarget: "both",
+  playbackMode: "pauseAware",
+  accentColor: "#0EA5A4",
+  widgetOpacity: 0.85,
+  floatingOpacity: 0.85
 };
 
 const AppCtx = createContext<Ctx | null>(null);
@@ -151,6 +168,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       try { const active = await Wallpaper.isLiveWallpaperActive(); persist({ liveWallpaperActive: !!active }); } catch {}
       try { const a11y = await Accessibility.isEnabled(); persist({ a11yEnabled: !!a11y }); } catch {}
+      // Sync the persisted playback policy to the native audio service so
+      // the BroadcastReceivers honour it from the very first event.
+      try {
+        const raw2 = await AsyncStorage.getItem(STORAGE_KEY);
+        const parsed2 = raw2 ? JSON.parse(raw2) : null;
+        const mode = (parsed2?.playbackMode === "alwaysPlay" ? "alwaysPlay" : "pauseAware") as
+          "alwaysPlay" | "pauseAware";
+        Audio.setPlaybackMode?.(mode);
+        // Also push the theme (accent + widget/floating opacity) so widgets
+        // pick up the user's persisted choices at boot, not just after the
+        // user re-saves them.
+        const accent = parsed2?.accentColor ?? "#0EA5A4";
+        const widgetOp = typeof parsed2?.widgetOpacity === "number" ? parsed2.widgetOpacity : 0.85;
+        const floatOp = typeof parsed2?.floatingOpacity === "number" ? parsed2.floatingOpacity : 0.85;
+        Widget.setTheme?.(accent, widgetOp, floatOp);
+      } catch {}
 
       // First-launch autoplay (req #8): start a "Nature Radio Rain"
       // stream automatically the first time the app opens. We try Radio
@@ -332,6 +365,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // lowered). Previous 30% floor was removed per user request.
       setUiOpacity: (v) => persist({ uiOpacity: Math.max(0, Math.min(1, v)) }),
       setWallpaperTarget: (t) => persist({ wallpaperTarget: t }),
+      setPlaybackMode: (m) => {
+        persist({ playbackMode: m });
+        try { Audio.setPlaybackMode?.(m); } catch {}
+      },
+      setAccentColor: (hex) => {
+        persist({ accentColor: hex });
+        try { Widget.setTheme?.(hex, state.widgetOpacity, state.floatingOpacity); } catch {}
+      },
+      setWidgetOpacity: (v) => {
+        const clamped = Math.max(0.2, Math.min(1, v));
+        persist({ widgetOpacity: clamped });
+        try { Widget.setTheme?.(state.accentColor, clamped, state.floatingOpacity); } catch {}
+      },
+      setFloatingOpacity: (v) => {
+        const clamped = Math.max(0.2, Math.min(1, v));
+        persist({ floatingOpacity: clamped });
+        try { Widget.setTheme?.(state.accentColor, state.widgetOpacity, clamped); } catch {}
+      },
       play: async (t) => {
         // If something is already playing, treat this as a track/station
         // switch — use the short fade-in path so the user doesn't perceive

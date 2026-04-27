@@ -202,6 +202,35 @@ export default function MusicScreen() {
             minimumTrackTintColor={theme.colors.accent} maximumTrackTintColor={theme.colors.border}
             thumbTintColor={theme.colors.accent}
             onSlidingComplete={(v) => app.setFadeMs(Math.round(v))}/>
+
+          {/* Playback policy (req #2). "Without pause" keeps audio going
+              through screen-off / other apps; "With pause" pauses on
+              SCREEN_OFF and when another app takes the foreground, then
+              auto-resumes on unlock / return to home. */}
+          <Text style={[styles.label, { marginTop: 12 }]}>{t("music.playbackMode")}</Text>
+          <View style={[styles.row, { gap: 6, marginTop: 6, flexWrap: "wrap" }]}>
+            <Pressable
+              onPress={() => app.setPlaybackMode("alwaysPlay")}
+              style={[styles.modeChip, app.playbackMode === "alwaysPlay" && styles.modeChipActive]}
+            >
+              <Ionicons name="infinite-outline" size={14} color={app.playbackMode === "alwaysPlay" ? "#0b1f14" : theme.colors.accent} />
+              <Text style={[styles.modeChipText, app.playbackMode === "alwaysPlay" && styles.modeChipTextActive]}>
+                {t("music.modeAlwaysPlay")}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => app.setPlaybackMode("pauseAware")}
+              style={[styles.modeChip, app.playbackMode === "pauseAware" && styles.modeChipActive]}
+            >
+              <Ionicons name="pause-circle-outline" size={14} color={app.playbackMode === "pauseAware" ? "#0b1f14" : theme.colors.accent} />
+              <Text style={[styles.modeChipText, app.playbackMode === "pauseAware" && styles.modeChipTextActive]}>
+                {t("music.modePauseAware")}
+              </Text>
+            </Pressable>
+          </View>
+          <Text style={[styles.body, { marginTop: 4, fontSize: 12, opacity: 0.8 }]}>
+            {app.playbackMode === "alwaysPlay" ? t("music.modeAlwaysPlayHint") : t("music.modePauseAwareHint")}
+          </Text>
         </GlassCard>
 
         <GlassCard>
@@ -444,5 +473,13 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.md,
     marginTop: 8
   },
-  searchInput: { flex: 1, color: theme.colors.textPrimary, fontSize: 14, paddingVertical: 0 }
+  searchInput: { flex: 1, color: theme.colors.textPrimary, fontSize: 14, paddingVertical: 0 },
+  modeChip: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: theme.radii.pill,
+    backgroundColor: "rgba(17,227,161,0.12)", borderWidth: 1, borderColor: theme.colors.border
+  },
+  modeChipActive: { backgroundColor: theme.colors.accent, borderColor: theme.colors.accent },
+  modeChipText: { color: theme.colors.accent, fontSize: 13, fontWeight: "600" },
+  modeChipTextActive: { color: "#0b1f14", fontWeight: "700" }
 });

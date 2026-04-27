@@ -8,9 +8,19 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BackgroundGradient } from "@/components/BackgroundGradient";
 import { GlassCard } from "@/components/GlassCard";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { SmoothSlider } from "@/components/SmoothSlider";
 import { theme } from "@/theme/theme";
 import { useApp } from "@/contexts/AppContext";
 import { Accessibility, Floating } from "@/native";
+
+const ACCENT_PRESETS: { hex: string; nameKey: string }[] = [
+  { hex: "#0EA5A4", nameKey: "settings.accentTeal" },
+  { hex: "#1E6F4D", nameKey: "settings.accentGreen" },
+  { hex: "#1F4FA2", nameKey: "settings.accentBlue" },
+  { hex: "#5E2BA8", nameKey: "settings.accentPurple" },
+  { hex: "#A8442B", nameKey: "settings.accentAmber" },
+  { hex: "#1F2937", nameKey: "settings.accentBlack" },
+];
 
 const PRIVACY_URL =
   "https://sites.google.com/view/relax-sound-live-wallpapers/%D0%B3%D0%BB%D0%B0%D0%B2%D0%BD%D0%B0%D1%8F-%D1%81%D1%82%D1%80%D0%B0%D0%BD%D0%B8%D1%86%D0%B0";
@@ -84,6 +94,56 @@ export default function SettingsScreen() {
               </View>
             </>
           )}
+        </GlassCard>
+
+        {/* Theme: accent colour + widget/floating opacity (req #9). */}
+        <GlassCard>
+          <Text style={styles.sectionTitle}>{t("settings.themeColor")}</Text>
+          <Text style={styles.body}>{t("settings.themeColorHint")}</Text>
+          <View style={[styles.row, { marginTop: 8, flexWrap: "wrap", gap: 8 }]}>
+            {ACCENT_PRESETS.map((p) => (
+              <Pressable
+                key={p.hex}
+                onPress={() => app.setAccentColor(p.hex)}
+                style={[
+                  styles.colorSwatch,
+                  { backgroundColor: p.hex },
+                  app.accentColor === p.hex && styles.colorSwatchActive
+                ]}
+                accessibilityLabel={t(p.nameKey)}
+              >
+                {app.accentColor === p.hex ? (
+                  <Ionicons name="checkmark" size={20} color="#fff" />
+                ) : null}
+              </Pressable>
+            ))}
+          </View>
+          <Text style={[styles.label, { marginTop: 14 }]}>
+            {t("settings.widgetOpacity")}: {Math.round(app.widgetOpacity * 100)}%
+          </Text>
+          <SmoothSlider
+            minimumValue={0.2}
+            maximumValue={1}
+            value={app.widgetOpacity}
+            step={0.01}
+            minimumTrackTintColor={app.accentColor}
+            maximumTrackTintColor={theme.colors.border}
+            thumbTintColor={app.accentColor}
+            onSlidingComplete={(v) => app.setWidgetOpacity(v)}
+          />
+          <Text style={styles.label}>
+            {t("settings.floatingOpacity")}: {Math.round(app.floatingOpacity * 100)}%
+          </Text>
+          <SmoothSlider
+            minimumValue={0.2}
+            maximumValue={1}
+            value={app.floatingOpacity}
+            step={0.01}
+            minimumTrackTintColor={app.accentColor}
+            maximumTrackTintColor={theme.colors.border}
+            thumbTintColor={app.accentColor}
+            onSlidingComplete={(v) => app.setFloatingOpacity(v)}
+          />
         </GlassCard>
 
         <GlassCard>
@@ -258,5 +318,12 @@ const styles = StyleSheet.create({
   },
   langChipText: { color: theme.colors.textSecondary, fontSize: theme.font.size.sm, fontWeight: "600" },
   langChipTextActive: { color: theme.colors.textPrimary },
-  collapseHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }
+  collapseHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  colorSwatch: {
+    width: 40, height: 40, borderRadius: 20,
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 2, borderColor: "rgba(255,255,255,0.18)"
+  },
+  colorSwatchActive: { borderColor: "#fff", borderWidth: 3 },
+  label: { color: theme.colors.textSecondary, fontSize: theme.font.size.sm, marginTop: 6 }
 });

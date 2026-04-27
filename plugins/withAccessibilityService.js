@@ -66,9 +66,36 @@ class RelaxAccessibilityModule(ctx: ReactApplicationContext) : ReactContextBaseJ
     @ReactMethod
     fun openAccessibilitySettings(promise: Promise) {
         try {
-            val i = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-            i.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            reactApplicationContext.startActivity(i)
+            val ctx = reactApplicationContext
+            // Prefer the per-service "Installed services" detail page so the
+            // user lands directly on our DoubleTapLockService toggle (req #4).
+            // EXTRA_COMPONENT_NAME accepts a flattenToString of the component.
+            val component = android.content.ComponentName(
+                ctx.packageName,
+                "${ctx.packageName}.a11y.DoubleTapLockService"
+            )
+            val direct = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                putExtra(":settings:fragment_args_key", component.flattenToString())
+                val args = android.os.Bundle()
+                args.putString(":settings:fragment_args_key", component.flattenToString())
+                putExtra(":settings:show_fragment_args", args)
+            }
+            val resolved = direct.resolveActivity(ctx.packageManager) != null
+            if (resolved) {
+                ctx.startActivity(direct)
+            } else {
+                // Fallback: Installed Services list (some OEMs).
+                val list = Intent("com.android.settings.ACCESSIBILITY_INSTALLED_SERVICES_SETTINGS")
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                if (list.resolveActivity(ctx.packageManager) != null) {
+                    ctx.startActivity(list)
+                } else {
+                    val i = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    ctx.startActivity(i)
+                }
+            }
             promise.resolve(true)
         } catch (t: Throwable) { promise.reject("A11Y_OPEN_FAIL", t) }
     }

@@ -29,11 +29,17 @@ export default function HomeScreen() {
 
   const loadGP = useCallback(async () => {
     setGpLoading(true);
+    setGpHintCollapsed(false);
+    const startedAt = Date.now();
     try {
       const urls = await fetchGooglePhotosAlbum();
       setGpPhotos(urls);
     } finally {
-      setGpLoading(false);
+      // Keep the loading dialog visible for at least 1.2s so the user
+      // actually sees the "please wait" notice on fast networks (req #13).
+      const elapsed = Date.now() - startedAt;
+      const remaining = Math.max(0, 1200 - elapsed);
+      setTimeout(() => setGpLoading(false), remaining);
     }
   }, []);
 
@@ -206,6 +212,46 @@ export default function HomeScreen() {
 
   return (
     <BackgroundGradient>
+      {/* Google Photos loading dialog (req #13). Shown as an actual popup
+          on top of the home screen the moment a fetch starts; collapses
+          to a small chip when the user taps the chevron, and dismisses
+          itself when fetching completes. */}
+      <Modal
+        visible={gpLoading && !gpHintCollapsed}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setGpHintCollapsed(true)}
+      >
+        <View style={styles.gpModalBackdrop}>
+          <View style={styles.gpModalCard}>
+            <View style={styles.gpModalRow}>
+              <Ionicons name="cloud-download-outline" size={20} color={theme.colors.accentGlow} />
+              <Text style={styles.gpModalTitle}>{t("home.gpLoadingTitle") || t("home.gpLoading")}</Text>
+            </View>
+            <Text style={styles.gpModalBody}>{t("home.gpLoadingNotice")}</Text>
+            <View style={styles.gpModalActions}>
+              <Pressable
+                onPress={() => setGpHintCollapsed(true)}
+                style={({ pressed }) => [styles.gpModalBtn, pressed && { opacity: 0.7 }]}
+              >
+                <Ionicons name="remove-outline" size={16} color={theme.colors.textSecondary} />
+                <Text style={styles.gpModalBtnText}>{t("home.gpHide") || "Hide"}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      {/* Floating mini chip when the loading dialog has been collapsed.
+          Tapping reopens the full popup (req #13 collapsibility). */}
+      {gpLoading && gpHintCollapsed && (
+        <Pressable
+          onPress={() => setGpHintCollapsed(false)}
+          style={[styles.gpFloatingChip, { top: insets.top + 12 }]}
+        >
+          <Ionicons name="hourglass-outline" size={14} color={theme.colors.accentGlow} />
+          <Text style={styles.gpLoadingMiniText}>{t("home.gpLoadingMini")}</Text>
+        </Pressable>
+      )}
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 8, paddingBottom: 130 }]}
         showsVerticalScrollIndicator={false}
@@ -591,6 +637,15 @@ const styles = StyleSheet.create({
   gpLoadingHint: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, backgroundColor: "rgba(34,197,94,0.08)", borderWidth: 1, borderColor: theme.colors.border },
   gpLoadingHintText: { color: theme.colors.textSecondary, fontSize: 12, flex: 1, lineHeight: 17 },
   gpLoadingMini: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", marginTop: 8, paddingHorizontal: 10, paddingVertical: 6, borderRadius: theme.radii.pill, backgroundColor: "rgba(34,197,94,0.10)" },
+  gpModalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "center", alignItems: "center", paddingHorizontal: 24 },
+  gpModalCard: { width: "100%", maxWidth: 360, backgroundColor: "rgba(15,28,22,0.96)", borderRadius: 16, padding: 18, borderWidth: 1, borderColor: theme.colors.border },
+  gpModalRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  gpModalTitle: { color: theme.colors.textPrimary, fontSize: 16, fontWeight: "700", flex: 1 },
+  gpModalBody: { color: theme.colors.textSecondary, fontSize: 13, lineHeight: 19, marginTop: 8 },
+  gpModalActions: { flexDirection: "row", justifyContent: "flex-end", marginTop: 14, gap: 8 },
+  gpModalBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, backgroundColor: "rgba(255,255,255,0.06)", borderWidth: 1, borderColor: theme.colors.border },
+  gpModalBtnText: { color: theme.colors.textSecondary, fontSize: 13, fontWeight: "600" },
+  gpFloatingChip: { position: "absolute", right: 14, zIndex: 10, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: theme.radii.pill, backgroundColor: "rgba(15,28,22,0.92)", borderWidth: 1, borderColor: theme.colors.border, shadowColor: "#000", shadowOpacity: 0.25, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 4 },
   gpLoadingMiniText: { color: theme.colors.accent, fontSize: 11, fontWeight: "600" },
   linkText: { color: theme.colors.accent, fontSize: 13, fontWeight: "600" },
   smallDanger: {

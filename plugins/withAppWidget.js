@@ -133,6 +133,26 @@ open class RelaxWidgetBase(private val size: String) : AppWidgetProvider() {
 
             try { views.setTextViewText(R.id::class.java.getField("title").getInt(null), title) } catch (_: Throwable) {}
             try { views.setTextViewText(R.id::class.java.getField("mode_label").getInt(null), mode.uppercase()) } catch (_: Throwable) {}
+            // Apply user-configured accent + widget opacity (req #9). Default
+            // teal #0EA5A4 if the user hasn't picked one yet. Opacity 0..1
+            // multiplies the alpha channel of the widget container.
+            try {
+                val themePrefs = ctx.getSharedPreferences("relax_theme", Context.MODE_PRIVATE)
+                val accent = themePrefs.getString("accent_color", "#0EA5A4") ?: "#0EA5A4"
+                val opacity = themePrefs.getFloat("widget_opacity", 0.85f).coerceIn(0.2f, 1f)
+                val argb = run {
+                    val color = android.graphics.Color.parseColor(accent)
+                    android.graphics.Color.argb(
+                        (opacity * 255f).toInt().coerceIn(0, 255),
+                        // Darken the accent so widget text stays legible.
+                        (android.graphics.Color.red(color) * 0.35f).toInt().coerceIn(0, 255),
+                        (android.graphics.Color.green(color) * 0.35f).toInt().coerceIn(0, 255),
+                        (android.graphics.Color.blue(color) * 0.35f).toInt().coerceIn(0, 255)
+                    )
+                }
+                val containerId = R.id::class.java.getField("widget_root").getInt(null)
+                views.setInt(containerId, "setBackgroundColor", argb)
+            } catch (_: Throwable) {}
             // Toggle the play/pause icon on the widget so it reflects the
             // actual playback state — req #1 / #11.
             try {
@@ -244,6 +264,33 @@ class RelaxWidgetModule(ctx: ReactApplicationContext) : ReactContextBaseJavaModu
         } catch (t: Throwable) { promise.reject("AUTOCHANGE_FAIL", t) }
     }
 
+    /**
+     * Persist the user's accent colour and widget/floating opacity so the
+     * widget RemoteViews and the floating bubble can repaint with the same
+     * theme on the next refresh tick (req #9).
+     */
+    @ReactMethod
+    fun setTheme(accentHex: String, widgetOpacity: Double, floatingOpacity: Double, promise: Promise) {
+        try {
+            val c = reactApplicationContext
+            c.getSharedPreferences("relax_theme", Context.MODE_PRIVATE).edit()
+                .putString("accent_color", accentHex)
+                .putFloat("widget_opacity", widgetOpacity.toFloat().coerceIn(0.2f, 1f))
+                .putFloat("floating_opacity", floatingOpacity.toFloat().coerceIn(0.2f, 1f))
+                .apply()
+            // Trigger a refresh of all home widgets so the new colour is
+            // applied immediately rather than at the next 60s system tick.
+            val mgr = AppWidgetManager.getInstance(c)
+            listOf(RelaxWidgetSmall::class.java, RelaxWidgetMedium::class.java)
+                .forEach { clz ->
+                    val ids = mgr.getAppWidgetIds(ComponentName(c, clz))
+                    val sz = when (clz.simpleName) { "RelaxWidgetSmall" -> "small"; else -> "medium" }
+                    ids.forEach { id -> RelaxWidgetBase.updateWidget(c, mgr, id, sz) }
+                }
+            promise.resolve(true)
+        } catch (t: Throwable) { promise.reject("THEME_FAIL", t) }
+    }
+
     @ReactMethod fun addListener(n: String) {}
     @ReactMethod fun removeListeners(n: Int) {}
 }
@@ -257,6 +304,7 @@ const widgetLayout = (variant) => {
   // mockups in design-screenshots.zip.
   return `<?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
     android:layout_width="match_parent" android:layout_height="match_parent"
     android:padding="12dp" android:orientation="vertical"
     android:background="@drawable/widget_background">

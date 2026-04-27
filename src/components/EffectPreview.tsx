@@ -31,8 +31,13 @@ export const EffectPreview: React.FC<{
 
   // When effect is "none", the native wallpaper engine skips overlay draw
   // entirely — mirror that behavior here so preview and real output match.
+  // Heavier per-particle shapes (snow has 6 lines, flowers 5 petals) cap
+  // lower than simple shapes so the JS thread stays at 30+ fps even on
+  // mid-range devices.
+  const heavyEffects: EffectKind[] = ["snow", "leaves", "flowers", "cherryblossom"];
+  const cap = heavyEffects.includes(effect) ? 22 : 36;
   const targetCount =
-    effect === "none" ? 0 : Math.max(10, Math.min(80, Math.round(intensity * 80)));
+    effect === "none" ? 0 : Math.max(8, Math.min(cap, Math.round(intensity * cap)));
 
   useEffect(() => {
     // Reset particles whenever the effect changes so old particles don't
@@ -45,9 +50,12 @@ export const EffectPreview: React.FC<{
     let raf: number;
     let lastTs = 0;
     let worldT = 0;
-    // Throttle to the user's chosen FPS (respect slider 10-120). When fps
-    // is undefined we fall back to free-running rAF (display refresh).
-    const minFrameMs = fps ? Math.max(1000 / 120, 1000 / Math.max(10, Math.min(120, fps))) : 0;
+    // Throttle to a max of 30 fps for the in-app preview — the native
+    // wallpaper engine still runs at the user-selected fps (60 default),
+    // but the JS-thread SVG path can't sustain that with multi-shape
+    // particles without dropping frames in the rest of the UI.
+    const cappedFps = fps ? Math.min(30, Math.max(10, fps)) : 30;
+    const minFrameMs = 1000 / cappedFps;
     const gravityFor = (e: EffectKind): number =>
       e === "rain" ? 28
       : e === "snow" ? 4

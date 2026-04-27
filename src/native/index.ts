@@ -41,11 +41,13 @@ interface AudioModuleI {
   unduck(): Promiselike<boolean>;
   toggleRepeat?(): Promiselike<boolean>;
   setRepeatMode?(mode: "off" | "all" | "one"): Promiselike<boolean>;
+  setPlaybackMode?(mode: "alwaysPlay" | "pauseAware"): Promiselike<string>;
 }
 interface WidgetModuleI {
   updateWidgetState(title: string, volume: number, mode: string): Promiselike<boolean>;
   setMediaLibrary(items: { uri: string; type: string }[]): Promiselike<boolean>;
   setAutoChange(enabled: boolean, seconds: number): Promiselike<boolean>;
+  setTheme?(accentHex: string, widgetOpacity: number, floatingOpacity: number): Promiselike<boolean>;
 }
 interface FloatingModuleI {
   hasOverlayPermission(): Promiselike<boolean>;

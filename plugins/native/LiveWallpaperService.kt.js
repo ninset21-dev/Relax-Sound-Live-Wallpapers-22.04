@@ -285,17 +285,57 @@ class RelaxWallpaperService : WallpaperService() {
                     // install at all").
                     try { mediaPlayer?.stop(); mediaPlayer?.release() } catch (_: Throwable) {}
                     mediaPlayer = null
+                    // Surface might still be in CPU producer mode after the
+                    // last drawFrame() (image wallpaper). Clear it once with
+                    // an empty lockCanvas so the next setDisplay() can claim
+                    // the producer slot cleanly. Wrapped in try so a fresh
+                    // surface (no prior canvas use) doesn't fail.
+                    try {
+                        val c = holder.lockCanvas()
+                        if (c != null) {
+                            c.drawColor(0, android.graphics.PorterDuff.Mode.CLEAR)
+                            holder.unlockCanvasAndPost(c)
+                        }
+                    } catch (_: Throwable) {}
+                    Log.i(TAG, "video setup uri=$videoUri")
                     mediaPlayer = MediaPlayer().apply {
-                        setDataSource(this@RelaxWallpaperService, Uri.parse(videoUri))
+                        // Prefer a file descriptor for file:// paths — bypasses
+                        // any URI permission quirks and works on every API.
+                        var loaded = false
+                        try {
+                            val u = Uri.parse(videoUri)
+                            val path = if (u.scheme == "file") u.path else null
+                            if (path != null) {
+                                val f = java.io.File(path)
+                                if (f.exists() && f.length() > 0) {
+                                    java.io.FileInputStream(f).use { fis ->
+                                        setDataSource(fis.fd)
+                                    }
+                                    loaded = true
+                                    Log.i(TAG, "video fd ok size=${f.length()}")
+                                }
+                            }
+                            if (!loaded) {
+                                setDataSource(this@RelaxWallpaperService, u)
+                                loaded = true
+                            }
+                        } catch (t: Throwable) {
+                            Log.e(TAG, "video setDataSource failed", t)
+                        }
+                        if (!loaded) return@apply
                         isLooping = true
                         setVolume(vol, vol)
                         setDisplay(holder)
-                        setOnPreparedListener { try { it.start() } catch (_: Throwable) {} }
+                        setOnPreparedListener {
+                            try { it.start(); Log.i(TAG, "video started ok") }
+                            catch (t: Throwable) { Log.e(TAG, "video start fail", t) }
+                        }
                         setOnErrorListener { _, what, extra ->
                             Log.e(TAG, "MediaPlayer error what=$what extra=$extra uri=$videoUri")
-                            false
+                            true
                         }
-                        prepareAsync()
+                        try { prepareAsync() }
+                        catch (t: Throwable) { Log.e(TAG, "prepareAsync failed", t) }
                     }
                     // Track that we've bound this URI so frameTick's change
                     // detector doesn't immediately tear the player down on

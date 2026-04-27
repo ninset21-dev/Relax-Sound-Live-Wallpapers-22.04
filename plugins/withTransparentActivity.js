@@ -26,9 +26,15 @@ const withTransparentActivity = (config) => {
       };
       ensureItem("android:windowBackground", "@android:color/transparent");
       ensureItem("android:windowIsTranslucent", "true");
+      ensureItem("android:windowNoTitle", "true");
       ensureItem("android:windowDrawsSystemBarBackgrounds", "true");
       ensureItem("android:statusBarColor", "@android:color/transparent");
       ensureItem("android:navigationBarColor", "@android:color/transparent");
+      // No system dim behind a translucent activity — without this the
+      // launcher beneath us is darkened by ~50% and looks "almost black"
+      // even when our windowBackground is transparent.
+      ensureItem("android:backgroundDimEnabled", "false");
+      ensureItem("android:colorBackgroundCacheHint", "@null");
       // CRITICAL: without windowShowWallpaper=true, a translucent activity
       // shows BLACK behind the app instead of the user's actual home-screen
       // wallpaper / launcher. This single flag is the difference between
@@ -56,11 +62,17 @@ const withTransparentActivity = (config) => {
   config = withMainActivity(config, (cfg) => {
     let src = cfg.modResults.contents;
     const isKotlin = cfg.modResults.language === "kt";
-    const importLine = isKotlin
+    const importColor = isKotlin
       ? "import android.graphics.Color"
       : "import android.graphics.Color;";
+    const importWmlp = isKotlin
+      ? "import android.view.WindowManager"
+      : "import android.view.WindowManager;";
     if (!src.includes("import android.graphics.Color")) {
-      src = src.replace(/(package [^\n]+\n)/, `$1\n${importLine}\n`);
+      src = src.replace(/(package [^\n]+\n)/, `$1\n${importColor}\n`);
+    }
+    if (!src.includes("import android.view.WindowManager")) {
+      src = src.replace(/(package [^\n]+\n)/, `$1\n${importWmlp}\n`);
     }
     const marker = "// withTransparentActivity";
     if (!src.includes(marker)) {
@@ -70,7 +82,14 @@ const withTransparentActivity = (config) => {
           `$1
         ${marker}: paint Activity decor + future React root view transparent
         try { window.decorView.setBackgroundColor(Color.TRANSPARENT) } catch (_: Throwable) {}
-        try { window.setBackgroundDrawable(null) } catch (_: Throwable) {}`
+        try { window.setBackgroundDrawable(null) } catch (_: Throwable) {}
+        // Public Android API equivalent of theme item windowShowWallpaper=true.
+        // We set it on the window flag at runtime so the user's home screen
+        // wallpaper is composited behind us regardless of OEM theme stripping.
+        try { window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER) } catch (_: Throwable) {}
+        // Disable system dim behind the translucent window, otherwise the
+        // launcher under us looks ~50% darker than the actual wallpaper.
+        try { window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND) } catch (_: Throwable) {}`
         );
       } else {
         src = src.replace(
@@ -78,7 +97,9 @@ const withTransparentActivity = (config) => {
           `$1
         ${marker} – paint Activity decor + future React root view transparent
         try { getWindow().getDecorView().setBackgroundColor(Color.TRANSPARENT); } catch (Throwable t) {}
-        try { getWindow().setBackgroundDrawable(null); } catch (Throwable t) {}`
+        try { getWindow().setBackgroundDrawable(null); } catch (Throwable t) {}
+        try { getWindow().addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER); } catch (Throwable t) {}
+        try { getWindow().clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND); } catch (Throwable t) {}`
         );
       }
     }

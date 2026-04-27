@@ -99,8 +99,10 @@ class RelaxFloatingService : Service() {
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         )
-        params.gravity = Gravity.TOP or Gravity.START
-        params.x = 40; params.y = 400
+        // Default position: bottom-right corner with a small inset so the
+        // bubble doesn't kiss the navigation bar / screen edge.
+        params.gravity = Gravity.BOTTOM or Gravity.END
+        params.x = 24; params.y = 160
         layoutParams = params
         wm?.addView(view, params)
         overlay = view
@@ -174,8 +176,11 @@ class RelaxFloatingService : Service() {
                 when (ev.action) {
                     MotionEvent.ACTION_DOWN -> { ix = p.x; iy = p.y; itx = ev.rawX; ity = ev.rawY }
                     MotionEvent.ACTION_MOVE -> {
-                        p.x = ix + (ev.rawX - itx).toInt()
-                        p.y = iy + (ev.rawY - ity).toInt()
+                        // Gravity is BOTTOM|END so x increases toward the LEFT
+                        // and y increases toward the TOP. Invert the raw deltas
+                        // so dragging the bubble feels natural.
+                        p.x = (ix - (ev.rawX - itx).toInt()).coerceAtLeast(0)
+                        p.y = (iy - (ev.rawY - ity).toInt()).coerceAtLeast(0)
                         wm?.updateViewLayout(v, p)
                     }
                 }
