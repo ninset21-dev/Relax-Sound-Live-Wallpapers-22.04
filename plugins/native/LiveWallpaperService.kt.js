@@ -312,7 +312,7 @@ class RelaxWallpaperService : WallpaperService() {
                                         setDataSource(fis.fd)
                                     }
                                     loaded = true
-                                    Log.i(TAG, "video fd ok size=${f.length()}")
+                                    Log.i(TAG, "video fd ok size=\${f.length()}")
                                 }
                             }
                             if (!loaded) {
