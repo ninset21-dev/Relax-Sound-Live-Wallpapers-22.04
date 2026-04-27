@@ -72,7 +72,7 @@ class RelaxAccessibilityModule(ctx: ReactApplicationContext) : ReactContextBaseJ
             // EXTRA_COMPONENT_NAME accepts a flattenToString of the component.
             val component = android.content.ComponentName(
                 ctx.packageName,
-                "${ctx.packageName}.a11y.DoubleTapLockService"
+                "\${ctx.packageName}.a11y.DoubleTapLockService"
             )
             val direct = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS").apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
