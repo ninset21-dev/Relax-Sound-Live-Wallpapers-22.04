@@ -90,7 +90,7 @@ Auto-detects Android system language. Eleven languages supported:
 English · Русский · Español · Português · Deutsch · Français · Italiano · Türkçe · 日本語 · 中文 · العربية
 
 ### Build Optimizations
-ProGuard/R8 with custom keep rules, resource shrinking, Hermes JS engine
+ProGuard/R8 with custom keep rules, Hermes JS engine
 
 ---
 
