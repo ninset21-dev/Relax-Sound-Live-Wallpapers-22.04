@@ -1,8 +1,20 @@
 # Relax Sound Live Wallpapers
 
-Android app that combines live wallpapers with ambient audio — procedural particle effects overlay your photos/videos while curated radio or local music plays in the background.
+An Android app that turns your home screen into a calming ambient environment — procedural particle effects (snow, rain, fireflies…) overlay your photos and videos while curated internet radio or local music plays in the background.
 
-Built with **Expo React Native** (TypeScript) + native **Kotlin** modules injected via custom Expo Config Plugins.
+Built with **Expo / React Native** (TypeScript) and native **Kotlin** modules injected at build time via custom Expo Config Plugins.
+
+---
+
+## Screenshots
+
+<p align="center">
+  <img src="https://app.devin.ai/attachments/a1c45569-f249-471e-982c-325ecb2b7fd4/Home%20%26%20Wallpaper%20Setup.png" width="180" alt="Home & Wallpaper Setup" />
+  <img src="https://app.devin.ai/attachments/d24b069e-b65a-41fa-8b40-dea4685bd81b/Music%20%26%20Radio%20Hub.png" width="180" alt="Music & Radio Hub" />
+  <img src="https://app.devin.ai/attachments/bfef97c2-1dc0-41e2-b424-1c3232697516/Advanced%20Settings.png" width="180" alt="Advanced Settings" />
+  <img src="https://app.devin.ai/attachments/629b87c9-110a-4b49-adc9-1725f0583a00/Widget%20Preview%20%26%20Config.png" width="180" alt="Widget Preview & Config" />
+  <img src="https://app.devin.ai/attachments/03f0c790-a613-4e5a-b729-f5c9ff33f55d/About%20%26%20Social.png" width="180" alt="About & Social" />
+</p>
 
 ---
 
@@ -25,23 +37,25 @@ Built with **Expo React Native** (TypeScript) + native **Kotlin** modules inject
 
 ## Features
 
-- **Live Wallpapers** — `WallpaperService` with Canvas/OpenGL rendering; independent HOME / LOCK screen targets
-- **Visual Effects** — snow, rain, bubbles, leaves, flowers, particles, fireflies with adjustable intensity, speed, and FPS
-- **Auto-Rotate Wallpapers** — timer-based cycling from a multi-select photo/video set or a public Google Photos album
-- **Music Player** — local tracks via SAF multi-select + online radio (20+ genres via [Radio Browser API](https://api.radio-browser.info)) with quality auto-adaptation based on network speed
-- **Foreground Audio Service** — persistent ExoPlayer playback, single-stream guarantee, auto-pause on screen off / audio-focus loss, smooth fade-in on resume
-- **Home Screen Widgets** — 3 `AppWidgetProvider` sizes: volume slider, play/pause, next/prev, mode toggle, track title display
-- **Floating Overlay Widget** — `SYSTEM_ALERT_WINDOW` overlay with swipe volume slider and collapse button
-- **Double-Tap Lock** — `AccessibilityService`-powered screen lock via gesture
-- **Glassmorphism UI** — dark-green theme with blur and transparency
-- **Internationalization** — auto-detects Android system language (Russian / English)
-- **Build Optimizations** — ProGuard/R8, resource shrinking, Hermes JS engine
+| Category | Details |
+|---|---|
+| **Live Wallpapers** | `WallpaperService` with Canvas/OpenGL rendering; independent HOME / LOCK screen targets |
+| **Visual Effects** | Snow, rain, bubbles, leaves, flowers, particles, fireflies — adjustable intensity, speed, and FPS |
+| **Auto-Rotate** | Timer-based wallpaper cycling from a multi-select photo/video set or a public Google Photos album |
+| **Music Player** | Local tracks via SAF multi-select + online radio (20+ genres via [Radio Browser API](https://api.radio-browser.info)) with quality auto-adaptation based on network speed |
+| **Audio Service** | Persistent ExoPlayer foreground service; single-stream guarantee; auto-pause on screen off / audio-focus loss; smooth fade-in on resume |
+| **Home Screen Widgets** | 3 `AppWidgetProvider` sizes — volume slider, play/pause, next/prev, mode toggle, track title |
+| **Floating Overlay** | `SYSTEM_ALERT_WINDOW` overlay with swipe volume slider and collapse button |
+| **Double-Tap Lock** | `AccessibilityService`-powered screen lock via gesture |
+| **Glassmorphism UI** | Dark-green theme with blur and transparency |
+| **i18n** | Auto-detects Android system language (Russian / English) |
+| **Build Optimizations** | ProGuard/R8, resource shrinking, Hermes JS engine |
 
 ---
 
 ## Architecture
 
-The app follows a **Config Plugin** pattern: all native Kotlin code lives in `plugins/native/` as JavaScript template strings. During `expo prebuild`, custom plugins inject these sources into the generated `android/` project along with the required manifest entries, resources, and Gradle dependencies.
+All native Kotlin code lives in `plugins/native/` as JavaScript template strings. During `expo prebuild`, custom config plugins inject these sources into the generated `android/` project along with the required manifest entries, resources, and Gradle dependencies.
 
 ```
 ┌──────────────────────────────────────────────────┐
@@ -82,9 +96,9 @@ app/                         Expo Router screens (tab navigation)
 │   └── settings.tsx         Settings — perf mode, language, widgets, overlay
 │
 src/
-├── components/              Reusable UI (GlassCard, Hint, PrimaryButton, BackgroundGradient)
+├── components/              Reusable UI (GlassCard, Hint, PrimaryButton, BackgroundGradient…)
 ├── contexts/AppContext.tsx   Global state management + native bridge orchestration
-├── i18n/index.ts            i18next setup with RU/EN translations
+├── i18n/                    i18next setup with RU/EN translations
 ├── native/index.ts          TypeScript interfaces for native modules (proxy-stubbed on non-Android)
 ├── services/
 │   ├── radio.ts             Radio Browser API client with quality tiers
@@ -98,6 +112,7 @@ plugins/                     Expo Config Plugins (build-time Android injection)
 ├── withFloatingWidget.js    SYSTEM_ALERT_WINDOW overlay
 ├── withAccessibilityService.js  Double-tap lock
 ├── withWallpaperModule.js   JS ↔ native bridge for wallpaper control
+├── withTransparentActivity.js   Transparent launcher activity
 ├── utils.js                 Shared file-writing helpers
 └── native/                  Kotlin source templates
     ├── LiveWallpaperService.kt.js
@@ -105,20 +120,21 @@ plugins/                     Expo Config Plugins (build-time Android injection)
     └── EffectRenderer.kt.js
 
 assets/                      App icons (PNG, SVG, adaptive) and splash screen
+design-v2/                   UI mockups and design references
 ```
 
 ---
 
 ## Requirements
 
-| Tool          | Version               |
-|---------------|-----------------------|
-| Node.js       | 18+ (LTS recommended) |
-| npm           | 9+                    |
-| EAS CLI       | >= 13.0.0             |
-| Expo SDK      | ~52                   |
-| Android SDK   | compileSdk 35, minSdk 24 (Android 7.0+) |
-| Java / JDK    | 17 (for local `expo run:android`) |
+| Tool | Version |
+|---|---|
+| Node.js | 18+ (LTS recommended) |
+| npm | 9+ |
+| EAS CLI | >= 13.0.0 |
+| Expo SDK | ~52 |
+| Android SDK | compileSdk 35, minSdk 24 (Android 7.0+) |
+| Java / JDK | 17 (for local `expo run:android`) |
 
 > **Note:** iOS is not supported — this project targets Android only.
 
@@ -201,15 +217,15 @@ npx eas submit -p android
 
 ## Scripts Reference
 
-| Script                | Command                                              | Description                                    |
-|-----------------------|------------------------------------------------------|------------------------------------------------|
-| `npm start`           | `expo start`                                         | Start Expo dev server                          |
-| `npm run android`     | `expo run:android`                                   | Build and run on Android device/emulator       |
-| `npm run prebuild`    | `expo prebuild --platform android --clean`           | Generate native Android project                |
-| `npm run build:apk`   | `eas build -p android --profile preview`             | Build APK via EAS (testing)                    |
-| `npm run build:production` | `eas build -p android --profile production`     | Build AAB via EAS (store release)              |
-| `npm run lint`        | `expo lint`                                          | Run ESLint                                     |
-| `npm run typecheck`   | `tsc --noEmit`                                       | TypeScript type checking                       |
+| Script | Command | Description |
+|---|---|---|
+| `npm start` | `expo start` | Start Expo dev server |
+| `npm run android` | `expo run:android` | Build and run on Android device/emulator |
+| `npm run prebuild` | `expo prebuild --platform android --clean` | Generate native Android project |
+| `npm run build:apk` | `eas build -p android --profile preview` | Build APK via EAS (testing) |
+| `npm run build:production` | `eas build -p android --profile production` | Build AAB via EAS (store release) |
+| `npm run lint` | `expo lint` | Run ESLint |
+| `npm run typecheck` | `tsc --noEmit` | TypeScript type checking |
 
 ---
 
@@ -217,7 +233,7 @@ npx eas submit -p android
 
 The app supports **Russian** and **English**, auto-detected from the Android system locale via `expo-localization` and `i18next`.
 
-Translations are defined inline in `src/i18n/index.ts`. To add a new language, add a translation object following the existing `ru` / `en` structure and register it in the `i18n.init()` call.
+Translations are defined in `src/i18n/`. To add a new language, add a translation object following the existing `ru` / `en` structure and register it in the `i18n.init()` call.
 
 ---
 
@@ -225,23 +241,22 @@ Translations are defined inline in `src/i18n/index.ts`. To add a new language, a
 
 Configurable in **Settings > App Mode**:
 
-| Mode        | FPS | Intensity | Best for                        |
-|-------------|-----|-----------|----------------------------------|
-| Eco         | 15  | 0.3       | Battery saving, older devices   |
-| Balanced    | 30  | User-set  | Default daily use               |
-| High        | 60  | User-set  | Smooth visuals, flagship phones |
+| Mode | FPS | Intensity | Best for |
+|---|---|---|---|
+| Eco | 15 | 0.3 | Battery saving, older devices |
+| Balanced | 30 | User-set | Default daily use |
+| High | 60 | User-set | Smooth visuals, flagship phones |
 
 ---
 
 ## Tech Stack
 
-**Frontend:** React Native 0.76, Expo SDK 52, Expo Router, React Native Reanimated, Gesture Handler, expo-blur, expo-av, expo-image, FlashList
-
-**Native:** Kotlin, ExoPlayer (Media3), Canvas/OpenGL rendering, Android WallpaperService, Foreground Service, AppWidgetProvider, AccessibilityService
-
-**Build:** EAS Build, Expo Config Plugins, Hermes, ProGuard/R8
-
-**Networking:** Radio Browser API, Google Photos scraping, NetInfo adaptive quality
+| Layer | Technologies |
+|---|---|
+| **Frontend** | React Native 0.76, Expo SDK 52, Expo Router, React Native Reanimated, Gesture Handler, expo-blur |
+| **Native** | Kotlin, ExoPlayer (Media3), Canvas/OpenGL rendering, Android WallpaperService, Foreground Service, AppWidgetProvider, AccessibilityService |
+| **Build** | EAS Build, Expo Config Plugins, Hermes, ProGuard/R8 |
+| **Networking** | Radio Browser API, Google Photos scraping, NetInfo adaptive quality |
 
 ---
 
