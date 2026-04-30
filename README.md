@@ -210,6 +210,8 @@ npm run build:production
 
 Produces a signed `.apk` for store distribution.
 
+> **Tip:** Google Play requires `.aab` (Android App Bundle) for new app submissions. To switch, change `"buildType": "apk"` to `"app-bundle"` in the `production` profile of `eas.json`.
+
 ### Submit to Google Play
 
 ```bash
